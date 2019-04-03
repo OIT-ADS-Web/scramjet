@@ -1,0 +1,6 @@
+.tool-versions
+.envrc
+*.toml
+.env
+cmd/staging_importer/staging_importer
+.vscode

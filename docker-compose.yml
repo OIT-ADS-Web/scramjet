@@ -1,0 +1,52 @@
+# FIXME: this starts postgres - but does not
+# deal with running the go code
+
+# NOTE: tried to use entrypoint-initdb.d to create test database
+# but couldn't get to work so did this:
+#https://www.linkedin.com/pulse/how-set-up-separate-test-development-databases-docker-prestemon-3
+version: "3"
+services:
+  postgres:
+    image: postgres:10.3-alpine
+    container_name: si_postgres
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./entry:/docker-entrypoint-initdb.d
+    environment:
+      POSTGRES_DB: "json_data"
+      POSTGRES_USER: "json_data"
+      POSTGRES_PASSWORD: "json_data"
+      POSTGRES_DATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - '5432:5432'
+    networks:
+      - si_network
+
+  #importer:
+  #  image: golang:1.12.1
+  #  working_dir: /app
+  #  volumes:
+  #    - .:/app
+  #    - $GOPATH/pkg/mod:/go/pkg/mod
+  #  environment:
+  #    - GOPATH=/go
+  #  depends_on:
+  #    - postgres
+  #  env_file:
+  #    - .env
+  #  links:
+  #    - postgres
+  #  networks:
+  #    - si_network
+  # command: >
+  #     bash -c "go run cmd/widgets_import/main.go
+  #     && go run cmd/elastic_import/main.go"
+
+networks:
+  si_network:
+    driver: bridge
+
+volumes:
+  #entry:
+  postgres:
+ 
