@@ -59,6 +59,24 @@ func RetrieveValidStaging(typeName string) []StagingResource {
 	return resources
 }
 
+func RetrieveInvalidStaging(typeName string) []StagingResource {
+	db := GetConnection()
+	resources := []StagingResource{}
+
+	// NOTE: this does *not* filter by is_valid so we can try
+	// again with previously fails
+	sql := `SELECT id, type, data 
+	FROM staging 
+	WHERE type = $1
+	AND is_valid = FALSE
+	`
+	err := db.Select(&resources, sql, typeName)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return resources
+}
+
 func ListTypeStaging(typeName string, validator si.ValidatorFunc) {
 	db := GetConnection()
 	resources := []StagingResource{}
@@ -159,32 +177,30 @@ select * from staging
 where (id, type) IN (('1', 'person'), ('2', 'person'))
 */
 func BatchMarkInvalidInStaging(resources []StagingResource) {
+	// NOTE: this would need to only do 500 at a time
+	// because of SQL IN clause limit
 	db := GetConnection()
 
-	//type tuple struct {
-	//	Id       string
-	//	TypeName string
-	//}
-	var matches = make([][]string, len(resources))
+	// TODO: better ways to do this
+	var clauses = make([]string, 0)
 
 	for _, resource := range resources {
-		ary := make([]string, 2)
-		ary = append(ary, resource.Id)
-		ary = append(ary, resource.Type)
-		//matches = append(matches, tuple{Id: resource.Id, TypeName: resource.Type})
-		matches = append(matches, ary)
+		s := fmt.Sprintf("('%s', '%s')", resource.Id, resource.Type)
+		clauses = append(clauses, s)
 	}
-	// limit in statement to 750? - batch up?
-	// , typeName string
+
+	inClause := strings.Join(clauses, ", ")
+
+	sql := fmt.Sprintf(`UPDATE staging set is_valid = FALSE WHERE (id, type) IN (
+		  %s
+		)`, inClause)
+
 	tx := db.MustBegin()
-	//fmt.Printf(">UPDATE:%v\n", res.Id)
-	sql := `UPDATE staging
-	  set is_valid = FALSE
-		WHERE (id, type) IN (:matches)`
-	_, err := tx.NamedExec(sql, resources)
+	_, err := tx.Exec(sql)
 
 	if err != nil {
 		log.Printf(">ERROR(UPDATE):%v", err)
+		// TODO: shouldn't exit in library
 		os.Exit(1)
 	}
 	tx.Commit()

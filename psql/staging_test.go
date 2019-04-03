@@ -196,5 +196,34 @@ func TestBatchValid(t *testing.T) {
 	if len(list) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
+}
 
+func TestBatchInValid(t *testing.T) {
+	// clear out staging here
+	psql.ClearAllStaging()
+	typeName := "person"
+
+	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
+	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+
+	people := []si.Identifiable{person1, person2}
+	err := psql.StashTypeStaging(typeName, people...)
+
+	if err != nil {
+		fmt.Println("could not save")
+		t.Errorf("err=%v\n", err)
+	}
+
+	alwaysBad := func(json string) bool { return false }
+	_, rejects := psql.FilterTypeStaging(typeName, alwaysBad)
+	if len(rejects) != 2 {
+		t.Error("did not retrieve 2 and only 2 record")
+	}
+
+	psql.BatchMarkInvalidInStaging(rejects)
+	// should be two marked as 'valid' now
+	list := psql.RetrieveInvalidStaging(typeName)
+	if len(list) != 2 {
+		t.Error("did not retrieve 2 and only 2 record")
+	}
 }
