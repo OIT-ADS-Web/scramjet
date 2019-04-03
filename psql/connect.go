@@ -11,9 +11,14 @@ import (
 )
 
 var Database *sqlx.DB
+var Name string
 
 func GetConnection() *sqlx.DB {
 	return Database
+}
+
+func GetDbName() string {
+	return Name
 }
 
 func MakeConnection(conf config.Config) error {
@@ -30,5 +35,7 @@ func MakeConnection(conf config.Config) error {
 	}
 
 	Database = db
+	// NOTE: just needed to check for table existence, probably better way
+	Name = conf.Database.Database
 	return err
 }

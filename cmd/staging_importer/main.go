@@ -12,7 +12,6 @@ import (
 
 func main() {
 	var conf config.Config
-	fmt.Println("Hello")
 
 	dbServer := flag.String("DB_SERVER", "", "database server")
 	dbPort := flag.Int("DB_PORT", 0, "database port")
@@ -44,8 +43,7 @@ func main() {
 
 	//db := psql.GetConnection()
 	// FIXME: how to get catalog name?
-	fmt.Printf("resource table? %t\n", psql.ResourceTableExists("json_data"))
+	fmt.Printf("resource table? %t\n", psql.ResourceTableExists())
 
-	fmt.Println("Goodbye")
 	defer psql.Database.Close()
 }

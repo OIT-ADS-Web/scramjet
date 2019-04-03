@@ -169,9 +169,10 @@ func SaveResource(obj interface{}, uri string, typeName string) (err error) {
 }
 
 // TODO: the 'table_catalog' changes
-func ResourceTableExists(catalog string) bool {
+func ResourceTableExists() bool {
 	var exists bool
 	db := GetConnection()
+	catalog := GetDbName()
 	// FIXME: not sure this is right
 	sqlExists := `SELECT EXISTS (
         SELECT 1

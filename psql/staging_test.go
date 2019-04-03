@@ -29,11 +29,11 @@ func setup() {
 		log.Fatal("cannot connect to database")
 	}
 
-	if !psql.StagingTableExists("docker") {
+	if !psql.StagingTableExists() {
 		fmt.Println("staging table not found")
 		psql.MakeStagingSchema()
 	}
-	if !psql.ResourceTableExists("docker") {
+	if !psql.ResourceTableExists() {
 		fmt.Println("resources table not found")
 		psql.MakeResourceSchema()
 	}

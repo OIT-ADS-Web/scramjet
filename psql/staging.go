@@ -155,9 +155,10 @@ func DeleteFromStaging(res StagingResource) {
 	}
 }
 
-func StagingTableExists(catalog string) bool {
+func StagingTableExists() bool {
 	var exists bool
 	db := GetConnection()
+	catalog := GetDbName()
 	// FIXME: not sure this is right
 	sqlExists := `SELECT EXISTS (
         SELECT 1
