@@ -142,3 +142,59 @@ func TestBulkAdd(t *testing.T) {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
 }
+
+func TestTypicalUsage(t *testing.T) {
+	// clear out staging here
+	psql.ClearAllStaging()
+	typeName := "person"
+
+	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
+	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+
+	people := []si.Identifiable{person1, person2}
+	err := psql.StashTypeStaging(typeName, people...)
+
+	if err != nil {
+		fmt.Println("could not save")
+		t.Errorf("err=%v\n", err)
+	}
+
+	all := psql.RetrieveTypeStaging(typeName)
+	if len(all) != 2 {
+		t.Error("did not retrieve 2 and only 2 record")
+	}
+	// what to check here?
+	// should be 2 records is_valid = TRUE
+	// should be 0 records is_valid = FALSE
+	// should be 0 records is_valid is NULL
+}
+
+func TestBatchValid(t *testing.T) {
+	// clear out staging here
+	psql.ClearAllStaging()
+	typeName := "person"
+
+	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
+	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+
+	people := []si.Identifiable{person1, person2}
+	err := psql.StashTypeStaging(typeName, people...)
+
+	if err != nil {
+		fmt.Println("could not save")
+		t.Errorf("err=%v\n", err)
+	}
+
+	alwaysOkay := func(json string) bool { return true }
+	valid, _ := psql.FilterTypeStaging(typeName, alwaysOkay)
+	if len(valid) != 2 {
+		t.Error("did not retrieve 2 and only 2 record")
+	}
+	psql.BatchMarkValidInStaging(valid)
+	// should be two marked as 'valid' now
+	list := psql.RetrieveValidStaging(typeName)
+	if len(list) != 2 {
+		t.Error("did not retrieve 2 and only 2 record")
+	}
+
+}
