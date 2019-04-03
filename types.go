@@ -5,4 +5,8 @@ type UriAddressable interface {
 	URI() string
 }
 
+type Identifiable interface {
+	Identifier() string
+}
+
 type ValidatorFunc func(json string) bool

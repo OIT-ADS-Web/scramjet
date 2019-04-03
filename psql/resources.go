@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx/types"
-	//"gitlab.oit.duke.edu/scholars/staging_importer"
 )
 
 // this is the raw structure in the database
@@ -31,6 +30,9 @@ type Resource struct {
 //func DeriveUri(u UriAddressable) string { return u.URI() }
 
 // Resources ...
+
+// TODO: could just send in date - leave it up to library user
+// to determine how it's figured out
 func RetrieveType(typeName string, updates bool) []Resource {
 	db := GetConnection()
 	resources := []Resource{}

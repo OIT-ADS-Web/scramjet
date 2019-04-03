@@ -7,6 +7,9 @@ import (
 	"log"
 	"os"
 
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
+
 	"github.com/jmoiron/sqlx/types"
 	si "gitlab.oit.duke.edu/scholars/staging_importer"
 )
@@ -57,7 +60,7 @@ func ListTypeStaging(typeName string, validator si.ValidatorFunc) {
 	}
 }
 
-func FilterStagingList(typeName string, validator si.ValidatorFunc) ([]StagingResource, []StagingResource) {
+func FilterTypeStaging(typeName string, validator si.ValidatorFunc) ([]StagingResource, []StagingResource) {
 	db := GetConnection()
 	resources := []StagingResource{}
 
@@ -67,7 +70,7 @@ func FilterStagingList(typeName string, validator si.ValidatorFunc) ([]StagingRe
 	sql := `SELECT id, type, data 
 	FROM staging 
 	WHERE type = $1
-	--AND is_valid != FALSE
+	AND is_valid is not null
 	`
 	err := db.Select(&resources, sql, typeName)
 	for _, element := range resources {
@@ -83,6 +86,19 @@ func FilterStagingList(typeName string, validator si.ValidatorFunc) ([]StagingRe
 		log.Fatalln(err)
 	}
 	return results, rejects
+}
+
+func StashTypeStaging(typeName string, docs []si.Identifiable) {
+	for _, doc := range docs {
+		AddStagingResource(doc, doc.Identifier(), typeName)
+	}
+}
+
+func ProcessTypeStaging(typeName string, validator si.ValidatorFunc) {
+	valid, rejects := FilterTypeStaging(typeName, validator)
+	BatchMarkValidInStaging(valid)
+	BatchMarkInvalidInStaging(rejects)
+	//return valid, rejects
 }
 
 func RetrieveSingleStaging(id string, typeName string) StagingResource {
@@ -101,6 +117,53 @@ func RetrieveSingleStaging(id string, typeName string) StagingResource {
 		log.Fatalln(err)
 	}
 	return found
+}
+
+/*
+    arg := map[string]interface{}{
+        "published": true,
+        "authors": []{8, 19, 32, 44},
+    }
+    query, args, err := sqlx.Named("SELECT * FROM articles WHERE published=:published AND author_id IN (:authors)", arg)
+    query, args, err := sqlx.In(query, args...)
+    query = db.Rebind(query)
+		db.Query(query, args...)
+*/
+
+/*
+select * from staging
+where (id, type) IN (('1', 'person'), ('2', 'person'))
+*/
+func BatchMarkInvalidInStaging(resources []StagingResource) {
+	db := GetConnection()
+
+	//type tuple struct {
+	//	Id       string
+	//	TypeName string
+	//}
+	var matches = make([][]string, len(resources))
+
+	for _, resource := range resources {
+		ary := make([]string, 2)
+		ary = append(ary, resource.Id)
+		ary = append(ary, resource.Type)
+		//matches = append(matches, tuple{Id: resource.Id, TypeName: resource.Type})
+		matches = append(matches, ary)
+	}
+	// limit in statement to 750? - batch up?
+	// , typeName string
+	tx := db.MustBegin()
+	//fmt.Printf(">UPDATE:%v\n", res.Id)
+	sql := `UPDATE staging
+	  set is_valid = FALSE
+		WHERE (id, type) IN (:matches)`
+	_, err := tx.NamedExec(sql, resources)
+
+	if err != nil {
+		log.Printf(">ERROR(UPDATE):%v", err)
+		os.Exit(1)
+	}
+	tx.Commit()
 }
 
 // TODO: should probably batch these when validating and
@@ -122,7 +185,38 @@ func MarkInvalidInStaging(res StagingResource) {
 	tx.Commit()
 }
 
-// TODO: see above (batching)
+func BatchMarkValidInStaging(resources []StagingResource) {
+	db := GetConnection()
+
+	//type tuple struct {
+	//	Id       string
+	//	TypeName string
+	//}
+	var matches = make([][]string, len(resources))
+
+	for _, resource := range resources {
+		ary := make([]string, 2)
+		ary = append(ary, resource.Id)
+		ary = append(ary, resource.Type)
+		//matches = append(matches, tuple{Id: resource.Id, TypeName: resource.Type})
+		matches = append(matches, ary)
+	}
+	// limit in statement to 750? - batch up?
+	// , typeName string
+	tx := db.MustBegin()
+	//fmt.Printf(">UPDATE:%v\n", res.Id)
+	sql := `UPDATE staging
+	  set is_valid = TRUE
+		WHERE (id, type) IN (:matches)`
+	_, err := tx.NamedExec(sql, resources)
+
+	if err != nil {
+		log.Printf(">ERROR(UPDATE):%v", err)
+		os.Exit(1)
+	}
+	tx.Commit()
+}
+
 func MarkValidInStaging(res StagingResource) {
 	db := GetConnection()
 
@@ -245,7 +339,7 @@ func AddStagingResource(obj interface{}, id string, typeName string) {
 	tx.Commit()
 }
 
-func SaveStagingResource(obj interface{}, id string, typeName string) {
+func SaveStagingResource(obj si.Identifiable, typeName string) {
 	db := GetConnection()
 
 	str, err := json.Marshal(obj)
@@ -254,12 +348,12 @@ func SaveStagingResource(obj interface{}, id string, typeName string) {
 	}
 
 	found := &StagingResource{}
-	res := &StagingResource{Id: id, Type: typeName, Data: str}
+	res := &StagingResource{Id: obj.Identifier(), Type: typeName, Data: str}
 
 	findSql := `SELECT id, type, data FROM staging
 	  WHERE (id = $1 AND type = $2)`
 
-	err = db.Get(&found, findSql, id, typeName)
+	err = db.Get(&found, findSql, obj.Identifier(), typeName)
 
 	tx := db.MustBegin()
 	if err != nil {
@@ -297,4 +391,119 @@ func StagingResourceExists(uri string, typeName string) bool {
 		return false
 	}
 	return exists
+}
+
+// should probably prepare statements beforehand
+// https://github.com/andreiavrammsd/go-postgresql-batch-operations
+//
+// stole code from here:
+//https://stackoverflow.com/questions/12486436/
+
+func unique(idSlice []si.Identifiable) []si.Identifiable {
+	keys := make(map[si.Identifiable]bool)
+	list := []si.Identifiable{}
+	for _, entry := range idSlice {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+
+/*
+func removeNulls(idSlice []si.Identifiable) []si.Identifiable {
+	list := []si.Identifiable{}
+	for _, entry := range idSlice {
+		fmt.Printf("identifer=%v\n", entry.Identifier())
+		if entry.Identifier() != "" {
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+*/
+
+func BulkAddStaging(typeName string, items ...si.Identifiable) error {
+	var resources = make([]StagingResource, 0)
+
+	// NOTE: not sure if these are necessary
+	list := unique(items)
+
+	for _, item := range list {
+		str, err := json.Marshal(item)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		res := &StagingResource{Id: item.Identifier(), Type: typeName, Data: str}
+		resources = append(resources, *res)
+	}
+
+	fmt.Printf("got %v resources\n", len(resources))
+
+	for _, resource := range resources {
+		fmt.Printf("res=%v\n", resource)
+	}
+	db := GetConnection()
+	txn, err := db.Begin()
+	if err != nil {
+		return errors.Wrap(err, "begin transaction")
+	}
+
+	txOK := false
+	defer func() {
+		if !txOK {
+			txn.Rollback()
+		}
+	}()
+
+	tmpSql := `CREATE TEMPORARY TABLE staging_data_tmp
+	  (id text NOT NULL, type text NOT NULL, data json NOT NULL)
+	  ON COMMIT DROP
+	`
+	log.Printf("sql=%s\n", tmpSql)
+	_, err = txn.Exec(tmpSql)
+
+	stmt, err := txn.Prepare(pq.CopyIn("staging_data_tmp", "id", "type", "data"))
+	for _, res := range resources {
+		// 4 times??
+		fmt.Println("trying to execute ...")
+		_, err = stmt.Exec(res.Id, typeName, res.Data)
+		if err != nil {
+			fmt.Errorf("%v\n", err)
+			return errors.Wrap(err, "loading COPY data")
+		}
+	}
+
+	_, err = stmt.Exec()
+	if err != nil {
+		fmt.Errorf("%v\n", err)
+		return errors.Wrap(err, "flush COPY data")
+	}
+	err = stmt.Close()
+	if err != nil {
+		fmt.Errorf("%v\n", err)
+		return errors.Wrap(err, "close COPY stmt")
+	}
+
+	sql2 := `INSERT INTO staging (id, type, data)
+	  SELECT id, type, data FROM staging_data_tmp
+	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data
+	`
+	log.Printf("sql=%s\n", sql2)
+	_, err = txn.Exec(sql2)
+
+	if err != nil {
+		fmt.Errorf("%v\n", err)
+		return errors.Wrap(err, "move from temporary to real table")
+	}
+
+	err = txn.Commit()
+	if err != nil {
+		fmt.Errorf("%v\n", err)
+		return errors.Wrap(err, "commit transaction")
+	}
+	txOK = true
+	fmt.Println("transaction okay")
+	return nil
 }

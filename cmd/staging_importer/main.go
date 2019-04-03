@@ -43,7 +43,16 @@ func main() {
 
 	//db := psql.GetConnection()
 	// FIXME: how to get catalog name?
-	fmt.Printf("resource table? %t\n", psql.ResourceTableExists())
+	//fmt.Printf("resource table? %t\n", psql.ResourceTableExists())
+
+	if !psql.StagingTableExists() {
+		fmt.Println("staging table not found")
+		psql.MakeStagingSchema()
+	}
+	if !psql.ResourceTableExists() {
+		fmt.Println("resources table not found")
+		psql.MakeResourceSchema()
+	}
 
 	defer psql.Database.Close()
 }
