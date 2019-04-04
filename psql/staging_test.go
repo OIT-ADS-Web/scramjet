@@ -64,6 +64,10 @@ func (tp TestPerson) Identifier() string {
 	return tp.Id
 }
 
+func (tp TestPerson) Uri() string {
+	return fmt.Sprintf("https://scholars.duke.edu/individual/per%s", tp.Identifier())
+}
+
 func TestStagingIngest(t *testing.T) {
 	person := &TestPerson{Id: "per0000001", Name: "Test"}
 	typeName := "person"

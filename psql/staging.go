@@ -126,7 +126,7 @@ func FilterTypeStaging(typeName string, validator si.ValidatorFunc) ([]StagingRe
 }
 
 func StashTypeStaging(typeName string, docs ...si.Identifiable) error {
-	// one at a time?
+	// allow one at a time?
 	/*
 		for _, doc := range docs {
 			AddStagingResource(doc, doc.Identifier(), typeName)
@@ -161,22 +161,15 @@ func RetrieveSingleStaging(id string, typeName string) StagingResource {
 	return found
 }
 
-/*
-    arg := map[string]interface{}{
-        "published": true,
-        "authors": []{8, 19, 32, 44},
-    }
-    query, args, err := sqlx.Named("SELECT * FROM articles WHERE published=:published AND author_id IN (:authors)", arg)
-    query, args, err := sqlx.In(query, args...)
-    query = db.Rebind(query)
-		db.Query(query, args...)
-*/
-
-/*
-select * from staging
-where (id, type) IN (('1', 'person'), ('2', 'person'))
-*/
 func BatchMarkInvalidInStaging(resources []StagingResource) {
+	chunked := chunked(resources, 500)
+	for _, chunk := range chunked {
+		batchMarkInvalidInStaging(chunk)
+	}
+}
+
+// made lowercase same name to not export
+func batchMarkInvalidInStaging(resources []StagingResource) {
 	// NOTE: this would need to only do 500 at a time
 	// because of SQL IN clause limit
 	db := GetConnection()
@@ -225,31 +218,31 @@ func MarkInvalidInStaging(res StagingResource) {
 	tx.Commit()
 }
 
-// needs to do this
-/*
-select * from staging
-where (id, type) IN (('1', 'person'), ('2', 'person'))
+//https://stackoverflow.com/questions/35179656/slice-chunking-in-go
+func chunked(resources []StagingResource, chunkSize int) [][]StagingResource {
+	var divided [][]StagingResource
 
-(ugly way to do it:)
-s := fmt.Sprintf("('%s', '%s')", t.Id, t.TypeName)
+	for i := 0; i < len(resources); i += chunkSize {
+		end := i + chunkSize
 
-fmt.Println(strings.Join(matches, ", "))
+		if end > len(resources) {
+			end = len(resources)
+		}
 
-buf := bytes.NewBufferString("UPDATE staging set is_valid = TRUE WHERE (id, type) IN(")
-for _, v := range matches {
-    if i > 0 {
-        buf.WriteString("),")
-    }
-    if _, err := strconv.Atoi(v); err != nil {
-        panic("Not number!")
-    }
-		buf.WriteString(v)
-		//buf.WriteString(")")
+		divided = append(divided, resources[i:end])
+	}
+	return divided
 }
-buf.WriteString(")")
 
-*/
 func BatchMarkValidInStaging(resources []StagingResource) {
+	chunked := chunked(resources, 500)
+	for _, chunk := range chunked {
+		batchMarkValidInStaging(chunk)
+	}
+}
+
+// okay to just not export?
+func batchMarkValidInStaging(resources []StagingResource) {
 	// NOTE: this would need to only do 500 at a time
 	// because of SQL IN clause limit
 	db := GetConnection()

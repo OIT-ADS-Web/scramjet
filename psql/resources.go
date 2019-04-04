@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx/types"
+	si "gitlab.oit.duke.edu/scholars/staging_importer"
 )
 
 // this is the raw structure in the database
@@ -33,7 +34,7 @@ type Resource struct {
 
 // TODO: could just send in date - leave it up to library user
 // to determine how it's figured out
-func RetrieveType(typeName string, updates bool) []Resource {
+func RetrieveResourceType(typeName string, updates bool) []Resource {
 	db := GetConnection()
 	resources := []Resource{}
 
@@ -64,7 +65,8 @@ func RetrieveType(typeName string, updates bool) []Resource {
 	return resources
 }
 
-func ListType(typeName string, updates bool) {
+/*
+func ListResourceType(typeName string, updates bool) []Resource {
 	db := GetConnection()
 	resources := []Resource{}
 
@@ -76,15 +78,15 @@ func ListType(typeName string, updates bool) {
 		rounded := time.Date(yesterday.Year(), yesterday.Month(),
 			yesterday.Day(), 0, 0, 0, 0, yesterday.Location())
 
-		sql := `SELECT uri, type, hash, data 
-		FROM resources 
-		WHERE type = $1 
+		sql := `SELECT uri, type, hash, data
+		FROM resources
+		WHERE type = $1
 		and updated_at >= $2
       `
 		err = db.Select(&resources, sql, typeName, rounded)
 	} else {
-		sql := `SELECT uri, type, hash, data 
-		FROM resources 
+		sql := `SELECT uri, type, hash, data
+		FROM resources
 		WHERE type = $1
       `
 		err = db.Select(&resources, sql, typeName)
@@ -99,7 +101,9 @@ func ListType(typeName string, updates bool) {
 	if err != nil {
 		log.Fatalln(err)
 	}
+	return resources
 }
+*/
 
 //https://stackoverflow.com/questions/2377881/how-to-get-a-md5-hash-from-a-string-in-golang
 func makeHash(text string) string {
@@ -108,7 +112,7 @@ func makeHash(text string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
-func SaveResource(obj interface{}, uri string, typeName string) (err error) {
+func SaveResource(obj si.UriAddressable, typeName string) (err error) {
 	str, err := json.Marshal(obj)
 	if err != nil {
 		log.Fatalln(err)
@@ -118,7 +122,7 @@ func SaveResource(obj interface{}, uri string, typeName string) (err error) {
 	hash := makeHash(string(str))
 
 	found := Resource{}
-	res := &Resource{Uri: uri,
+	res := &Resource{Uri: obj.Uri(),
 		Type:  typeName,
 		Hash:  hash,
 		Data:  str,
@@ -129,7 +133,7 @@ func SaveResource(obj interface{}, uri string, typeName string) (err error) {
 		WHERE (uri = $1 AND type = $2)
 	`
 
-	err = db.Get(&found, findSQL, uri, typeName)
+	err = db.Get(&found, findSQL, obj.Uri(), typeName)
 
 	tx := db.MustBegin()
 	// error means not found - sql.ErrNoRows
