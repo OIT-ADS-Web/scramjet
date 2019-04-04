@@ -2,12 +2,24 @@ package psql_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
 	si "gitlab.oit.duke.edu/scholars/staging_importer"
 	"gitlab.oit.duke.edu/scholars/staging_importer/psql"
 )
+
+// each usage would need it's own implementation of this
+// maybe make it a type-mapper object of some sort
+// and able to pass in to processor?
+func makeStub(typeName string) (si.UriAddressable, error) {
+	switch typeName {
+	case "person":
+		return &TestPerson{}, nil
+	}
+	return nil, errors.New("No match")
+}
 
 func TestResourcesIngest(t *testing.T) {
 	// NOTE: this is kind of re-hash of test in staging_test
@@ -37,12 +49,14 @@ func TestResourcesIngest(t *testing.T) {
 	// now take that list and move to resources
 	for _, res := range list {
 		fmt.Println(res)
+		//per := &TestPerson{}
+		per, err := makeStub(typeName)
 
-		per := &TestPerson{}
-		err := json.Unmarshal(res.Data, per)
+		err = json.Unmarshal(res.Data, per)
 		if err != nil {
 			t.Error("error unmarshalling json")
 		}
+		// one at a time
 		psql.SaveResource(per, typeName)
 	}
 
