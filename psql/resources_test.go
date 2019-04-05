@@ -51,7 +51,9 @@ func TestResourcesIngest(t *testing.T) {
 		fmt.Println(res)
 		//per := &TestPerson{}
 		per, err := makeStub(typeName)
-
+		if err != nil {
+			t.Error("error making struct")
+		}
 		err = json.Unmarshal(res.Data, per)
 		if err != nil {
 			t.Error("error unmarshalling json")
