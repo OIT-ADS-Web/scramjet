@@ -1,4 +1,4 @@
-package psql
+package staging_importer
 
 import (
 	"database/sql"
@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/jmoiron/sqlx/types"
-	si "gitlab.oit.duke.edu/scholars/staging_importer"
 )
 
 type StagingResource struct {
@@ -77,7 +76,7 @@ func RetrieveInvalidStaging(typeName string) []StagingResource {
 	return resources
 }
 
-func ListTypeStaging(typeName string, validator si.ValidatorFunc) {
+func ListTypeStaging(typeName string, validator ValidatorFunc) {
 	db := GetConnection()
 	resources := []StagingResource{}
 
@@ -97,7 +96,7 @@ func ListTypeStaging(typeName string, validator si.ValidatorFunc) {
 	}
 }
 
-func FilterTypeStaging(typeName string, validator si.ValidatorFunc) ([]StagingResource, []StagingResource) {
+func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]StagingResource, []StagingResource) {
 	db := GetConnection()
 	resources := []StagingResource{}
 
@@ -125,7 +124,7 @@ func FilterTypeStaging(typeName string, validator si.ValidatorFunc) ([]StagingRe
 	return results, rejects
 }
 
-func StashTypeStaging(typeName string, docs ...si.Identifiable) error {
+func StashTypeStaging(typeName string, docs ...Identifiable) error {
 	// allow one at a time?
 	/*
 		for _, doc := range docs {
@@ -136,7 +135,7 @@ func StashTypeStaging(typeName string, docs ...si.Identifiable) error {
 	return err
 }
 
-func ProcessTypeStaging(typeName string, validator si.ValidatorFunc) {
+func ProcessTypeStaging(typeName string, validator ValidatorFunc) {
 	valid, rejects := FilterTypeStaging(typeName, validator)
 	BatchMarkValidInStaging(valid)
 	BatchMarkInvalidInStaging(rejects)
@@ -394,7 +393,7 @@ func AddStagingResource(obj interface{}, id string, typeName string) {
 	tx.Commit()
 }
 
-func SaveStagingResource(obj si.Identifiable, typeName string) {
+func SaveStagingResource(obj Identifiable, typeName string) {
 	db := GetConnection()
 
 	str, err := json.Marshal(obj)
@@ -454,9 +453,9 @@ func StagingResourceExists(uri string, typeName string) bool {
 // stole code from here:
 //https://stackoverflow.com/questions/12486436/
 
-func unique(idSlice []si.Identifiable) []si.Identifiable {
-	keys := make(map[si.Identifiable]bool)
-	list := []si.Identifiable{}
+func unique(idSlice []Identifiable) []Identifiable {
+	keys := make(map[Identifiable]bool)
+	list := []Identifiable{}
 	for _, entry := range idSlice {
 		if _, value := keys[entry]; !value {
 			keys[entry] = true
@@ -467,8 +466,8 @@ func unique(idSlice []si.Identifiable) []si.Identifiable {
 }
 
 /*
-func removeNulls(idSlice []si.Identifiable) []si.Identifiable {
-	list := []si.Identifiable{}
+func removeNulls(idSlice []Identifiable) []Identifiable {
+	list := []Identifiable{}
 	for _, entry := range idSlice {
 		fmt.Printf("identifer=%v\n", entry.Identifier())
 		if entry.Identifier() != "" {
@@ -479,7 +478,7 @@ func removeNulls(idSlice []si.Identifiable) []si.Identifiable {
 }
 */
 
-func BulkAddStaging(typeName string, items ...si.Identifiable) error {
+func BulkAddStaging(typeName string, items ...Identifiable) error {
 	var resources = make([]StagingResource, 0)
 
 	// NOTE: not sure if these are necessary

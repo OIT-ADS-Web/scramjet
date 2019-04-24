@@ -1,4 +1,4 @@
-package psql_test
+package staging_importer_test
 
 import (
 	"encoding/json"
@@ -6,14 +6,13 @@ import (
 	"fmt"
 	"testing"
 
-	si "gitlab.oit.duke.edu/scholars/staging_importer"
-	"gitlab.oit.duke.edu/scholars/staging_importer/psql"
+	sj "gitlab.oit.duke.edu/scholars/staging_importer"
 )
 
 // each usage would need it's own implementation of this
 // maybe make it a type-mapper object of some sort
 // and able to pass in to processor?
-func makeStub(typeName string) (si.UriAddressable, error) {
+func makeStub(typeName string) (sj.UriAddressable, error) {
 	switch typeName {
 	case "person":
 		return &TestPerson{}, nil
@@ -23,15 +22,15 @@ func makeStub(typeName string) (si.UriAddressable, error) {
 
 func TestResourcesIngest(t *testing.T) {
 	// NOTE: this is kind of re-hash of test in staging_test
-	psql.ClearAllStaging()
-	psql.ClearAllResources()
+	sj.ClearAllStaging()
+	sj.ClearAllResources()
 	typeName := "person"
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
 
-	people := []si.Identifiable{person1, person2}
-	err := psql.StashTypeStaging(typeName, people...)
+	people := []sj.Identifiable{person1, person2}
+	err := sj.StashTypeStaging(typeName, people...)
 
 	if err != nil {
 		fmt.Println("could not save")
@@ -39,12 +38,12 @@ func TestResourcesIngest(t *testing.T) {
 	}
 
 	alwaysOkay := func(json string) bool { return true }
-	valid, _ := psql.FilterTypeStaging(typeName, alwaysOkay)
+	valid, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
 
 	// mark them so we know they are processed and okay to go
 	// into resources table
-	psql.BatchMarkValidInStaging(valid)
-	list := psql.RetrieveValidStaging(typeName)
+	sj.BatchMarkValidInStaging(valid)
+	list := sj.RetrieveValidStaging(typeName)
 
 	// now take that list and move to resources
 	for _, res := range list {
@@ -59,11 +58,11 @@ func TestResourcesIngest(t *testing.T) {
 			t.Error("error unmarshalling json")
 		}
 		// one at a time
-		psql.SaveResource(per, typeName)
+		sj.SaveResource(per, typeName)
 	}
 
 	// TODO: need a better way to limit to updates
-	stashed := psql.RetrieveResourceType(typeName, false)
+	stashed := sj.RetrieveResourceType(typeName, false)
 	// NOTE: not marked in db column yet
 	if len(stashed) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")

@@ -6,12 +6,11 @@ import (
 	"os"
 
 	"github.com/namsral/flag"
-	"gitlab.oit.duke.edu/scholars/staging_importer/config"
-	"gitlab.oit.duke.edu/scholars/staging_importer/psql"
+	sj "gitlab.oit.duke.edu/scholars/staging_importer"
 )
 
 func main() {
-	var conf config.Config
+	var conf sj.Config
 
 	dbServer := flag.String("DB_SERVER", "", "database server")
 	dbPort := flag.Int("DB_PORT", 0, "database port")
@@ -24,19 +23,19 @@ func main() {
 	if len(*dbServer) == 0 && len(*dbUser) == 0 {
 		log.Fatal("database credentials need to be set")
 	} else {
-		database := config.Database{
+		database := sj.DatabaseInfo{
 			Server:   *dbServer,
 			Database: *dbDatabase,
 			Password: *dbPassword,
 			Port:     *dbPort,
 			User:     *dbUser,
 		}
-		conf = config.Config{
+		conf = sj.Config{
 			Database: database,
 		}
 	}
 
-	if err := psql.MakeConnection(conf); err != nil {
+	if err := sj.MakeConnection(conf); err != nil {
 		fmt.Printf("could not establish postgresql connection %s\n", err)
 		os.Exit(1)
 	}
@@ -45,14 +44,14 @@ func main() {
 	// FIXME: how to get catalog name?
 	//fmt.Printf("resource table? %t\n", psql.ResourceTableExists())
 
-	if !psql.StagingTableExists() {
+	if !sj.StagingTableExists() {
 		fmt.Println("staging table not found")
-		psql.MakeStagingSchema()
+		sj.MakeStagingSchema()
 	}
-	if !psql.ResourceTableExists() {
+	if !sj.ResourceTableExists() {
 		fmt.Println("resources table not found")
-		psql.MakeResourceSchema()
+		sj.MakeResourceSchema()
 	}
 
-	defer psql.Database.Close()
+	defer sj.Database.Close()
 }

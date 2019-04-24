@@ -1,9 +1,6 @@
 # FIXME: this starts postgres - but does not
 # deal with running the go code
 
-# NOTE: tried to use entrypoint-initdb.d to create test database
-# but couldn't get to work so did this:
-#https://www.linkedin.com/pulse/how-set-up-separate-test-development-databases-docker-prestemon-3
 version: "3"
 services:
   postgres:

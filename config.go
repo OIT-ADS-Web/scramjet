@@ -1,11 +1,11 @@
-package config
+package staging_importer
 
 // more flexible?
 type Config struct {
-	Database Database
+	Database DatabaseInfo
 }
 
-type Database struct {
+type DatabaseInfo struct {
 	Server   string
 	Port     int
 	Database string

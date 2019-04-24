@@ -1,4 +1,4 @@
-package psql
+package staging_importer
 
 import (
 	"crypto/md5"
@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx/types"
-	si "gitlab.oit.duke.edu/scholars/staging_importer"
 )
 
 // this is the raw structure in the database
@@ -112,7 +111,7 @@ func makeHash(text string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
-func SaveResource(obj si.UriAddressable, typeName string) (err error) {
+func SaveResource(obj UriAddressable, typeName string) (err error) {
 	str, err := json.Marshal(obj)
 	if err != nil {
 		log.Fatalln(err)
