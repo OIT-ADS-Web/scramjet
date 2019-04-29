@@ -67,6 +67,7 @@ func (tp TestPerson) Uri() string {
 }
 
 func TestStagingIngest(t *testing.T) {
+	sj.ClearAllStaging()
 	person := &TestPerson{Id: "per0000001", Name: "Test"}
 	typeName := "person"
 	// 1. save

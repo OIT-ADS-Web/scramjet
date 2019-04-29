@@ -27,6 +27,8 @@ services:
   #    - $GOPATH/pkg/mod:/go/pkg/mod
   #  environment:
   #    - GOPATH=/go
+  #  env_file:
+  #  - .env
   #  depends_on:
   #    - postgres
   #  env_file:
