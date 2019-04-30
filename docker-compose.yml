@@ -38,8 +38,7 @@ services:
   #  networks:
   #    - si_network
   # command: >
-  #     bash -c "go run cmd/widgets_import/main.go
-  #     && go run cmd/elastic_import/main.go"
+  #     bash -c "go run cmd/staging_import/main.go"
 
 networks:
   si_network:
