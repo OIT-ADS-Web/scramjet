@@ -23,7 +23,9 @@ func setup() {
 	}
 
 	// NOTE: this just makes connection
-	err := sj.MakeConnection(config)
+	//err := sj.MakeConnection(config)
+	err := sj.MakeConnectionPool(config)
+
 	if err != nil {
 		log.Fatal("cannot connect to database")
 	}
@@ -43,7 +45,9 @@ func setup() {
 }
 
 func shutdown() {
-	db := sj.GetConnection()
+	//db := sj.GetConnection()
+	db := sj.GetPool()
+
 	db.Close()
 }
 func TestMain(m *testing.M) {

@@ -47,8 +47,6 @@ func TestResourcesIngest(t *testing.T) {
 
 	// now take that list and move to resources
 	for _, res := range list {
-		fmt.Println(res)
-		//per := &TestPerson{}
 		per, err := makeStub(typeName)
 		if err != nil {
 			t.Error("error making struct")

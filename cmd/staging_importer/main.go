@@ -35,14 +35,10 @@ func main() {
 		}
 	}
 
-	if err := sj.MakeConnection(conf); err != nil {
+	if err := sj.MakeConnectionPool(conf); err != nil {
 		fmt.Printf("could not establish postgresql connection %s\n", err)
 		os.Exit(1)
 	}
-
-	//db := psql.GetConnection()
-	// FIXME: how to get catalog name?
-	//fmt.Printf("resource table? %t\n", psql.ResourceTableExists())
 
 	if !sj.StagingTableExists() {
 		fmt.Println("staging table not found")
@@ -53,5 +49,5 @@ func main() {
 		sj.MakeResourceSchema()
 	}
 
-	defer sj.Database.Close()
+	defer sj.Pool.Close()
 }

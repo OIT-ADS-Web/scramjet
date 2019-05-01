@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmoiron/sqlx/types"
+	"github.com/jackc/pgx/pgtype"
 )
 
 // this is the raw structure in the database
@@ -18,13 +18,13 @@ import (
 // * 'data' can be used for change comparison with hash
 // * 'data_b' can be used for searches
 type Resource struct {
-	Uri       string         `db:"uri"`
-	Type      string         `db:"type"`
-	Hash      string         `db:"hash"`
-	Data      types.JSONText `db:"data"`
-	DataB     types.JSONText `db:"data_b"`
-	CreatedAt time.Time      `db:"created_at"`
-	UpdatedAt time.Time      `db:"updated_at"`
+	Uri       string       `db:"uri"`
+	Type      string       `db:"type"`
+	Hash      string       `db:"hash"`
+	Data      pgtype.JSON  `db:"data"`
+	DataB     pgtype.JSONB `db:"data_b"`
+	CreatedAt time.Time    `db:"created_at"`
+	UpdatedAt time.Time    `db:"updated_at"`
 }
 
 //func DeriveUri(u UriAddressable) string { return u.URI() }
@@ -34,7 +34,7 @@ type Resource struct {
 // TODO: could just send in date - leave it up to library user
 // to determine how it's figured out
 func RetrieveResourceType(typeName string, updates bool) []Resource {
-	db := GetConnection()
+	db := GetPool()
 	resources := []Resource{}
 
 	// need better way to find 'last run'
@@ -49,60 +49,62 @@ func RetrieveResourceType(typeName string, updates bool) []Resource {
 		FROM resources 
 		WHERE type =  $1 and updated_at >= $2
       `
-		err = db.Select(&resources, sql, typeName, rounded)
+		rows, _ := db.Query(sql, typeName, rounded)
+
+		for rows.Next() {
+			var uri string
+			var typeName string
+			var hash string
+			var json pgtype.JSON
+			var jsonB pgtype.JSONB
+
+			err = rows.Scan(&uri, &typeName, &hash, &json, &jsonB)
+			res := Resource{Uri: uri,
+				Type:  typeName,
+				Hash:  hash,
+				Data:  json,
+				DataB: jsonB}
+			resources = append(resources, res)
+
+			if err != nil {
+				// is this the correct thing to do?
+				continue
+			}
+		}
 	} else {
-		sql := `SELECT uri, type, hash, data 
+		sql := `SELECT uri, type, hash, data, data_b
 		FROM resources 
 		WHERE type =  $1
 		`
-		err = db.Select(&resources, sql, typeName)
+		rows, _ := db.Query(sql, typeName)
+
+		for rows.Next() {
+			var uri string
+			var typeName string
+			var hash string
+			var json pgtype.JSON
+			var jsonB pgtype.JSONB
+
+			err = rows.Scan(&uri, &typeName, &hash, &json, &jsonB)
+			res := Resource{Uri: uri,
+				Type:  typeName,
+				Hash:  hash,
+				Data:  json,
+				DataB: jsonB}
+			resources = append(resources, res)
+
+			if err != nil {
+				// is this the correct thing to do?
+				continue
+			}
+		}
 	}
 
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalf("retrieve resource type: %#v\n", err)
 	}
 	return resources
 }
-
-/*
-func ListResourceType(typeName string, updates bool) []Resource {
-	db := GetConnection()
-	resources := []Resource{}
-
-	var err error
-	if updates {
-		// TODO: ideally would need to record time last run somewhere
-		yesterday := time.Now().AddDate(0, 0, -1)
-
-		rounded := time.Date(yesterday.Year(), yesterday.Month(),
-			yesterday.Day(), 0, 0, 0, 0, yesterday.Location())
-
-		sql := `SELECT uri, type, hash, data
-		FROM resources
-		WHERE type = $1
-		and updated_at >= $2
-      `
-		err = db.Select(&resources, sql, typeName, rounded)
-	} else {
-		sql := `SELECT uri, type, hash, data
-		FROM resources
-		WHERE type = $1
-      `
-		err = db.Select(&resources, sql, typeName)
-	}
-
-	for _, element := range resources {
-		log.Println(element)
-		// element is the element from someSlice for where we are
-	}
-	log.Printf("******* count = %d ********\n", len(resources))
-
-	if err != nil {
-		log.Fatalln(err)
-	}
-	return resources
-}
-*/
 
 //https://stackoverflow.com/questions/2377881/how-to-get-a-md5-hash-from-a-string-in-golang
 func makeHash(text string) string {
@@ -117,33 +119,44 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 		log.Fatalln(err)
 	}
 
-	db := GetConnection()
+	db := GetPool()
+
 	hash := makeHash(string(str))
 
 	found := Resource{}
+	var data pgtype.JSON
+	var dataB pgtype.JSONB
+	err = data.Set(str)
+	err = dataB.Set(str)
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	res := &Resource{Uri: obj.Uri(),
 		Type:  typeName,
 		Hash:  hash,
-		Data:  str,
-		DataB: str}
+		Data:  data,
+		DataB: dataB}
 
 	findSQL := `SELECT uri, type, hash, data, data_b  
 	  FROM resources 
 		WHERE (uri = $1 AND type = $2)
 	`
 
-	err = db.Get(&found, findSQL, obj.Uri(), typeName)
+	row := db.QueryRow(findSQL, obj.Uri(), typeName)
+	notFoundError := row.Scan(&found.Uri, &found.Type)
 
-	tx := db.MustBegin()
-	// error means not found - sql.ErrNoRows
-	if err != nil {
-		// NOTE: assuming the error means it doesn't exist
-		fmt.Printf(">ADD:%v\n", res.Uri)
+	tx, err := db.Begin()
+
+	if notFoundError != nil {
 		sql := `INSERT INTO resources (uri, type, hash, data, data_b) 
-	      VALUES (:uri, :type, :hash, :data, :data_b)`
-		_, err := tx.NamedExec(sql, res)
+	      VALUES ($1, $2, $3, $4, $5)`
+		_, err := tx.Exec(sql, res.Uri, res.Type, res.Hash, &res.Data, &res.DataB)
+
 		if err != nil {
 			log.Printf(">ERROR(INSERT):%v", err)
+			// exit here?
 			os.Exit(1)
 		}
 	} else {
@@ -153,14 +166,14 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 		} else {
 			fmt.Printf(">UPDATE:%v\n", found.Uri)
 			sql := `UPDATE resources 
-	        set uri = :uri, 
-		      type = :type, 
-		      hash = :hash, 
-		      data = :data, 
-		      data_b = :data_b,
+	        set uri = $1, 
+		      type = $2, 
+		      hash = $3, 
+		      data = $4, 
+		      data_b = $5,
 		      updated_at = NOW()
-		      WHERE uri = :uri and type = :type`
-			_, err := tx.NamedExec(sql, res)
+		      WHERE uri = $1 and type = $2`
+			_, err := tx.Exec(sql, res.Uri, res.Type, res.Hash, &res.Data, &res.DataB)
 
 			if err != nil {
 				log.Printf(">ERROR(UPDATE):%v", err)
@@ -169,14 +182,15 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 		}
 	}
 
-	tx.Commit()
+	err = tx.Commit()
 	return err
 }
 
 // TODO: the 'table_catalog' changes
 func ResourceTableExists() bool {
 	var exists bool
-	db := GetConnection()
+	db := GetPool()
+
 	catalog := GetDbName()
 	// FIXME: not sure this is right
 	sqlExists := `SELECT EXISTS (
@@ -209,42 +223,72 @@ func MakeResourceSchema() {
         PRIMARY KEY(uri, type)
     )`
 
-	db := GetConnection()
-	tx := db.MustBegin()
-	tx.MustExec(sql)
+	db := GetPool()
 
-	err := tx.Commit()
+	tx, err := db.Begin()
+	if err != nil {
+		log.Printf(">error beginning transaction:%v", err)
+		os.Exit(1)
+	}
+	_, err = tx.Exec(sql)
+
+	if err != nil {
+		log.Printf(">error executing sql:%v", err)
+		os.Exit(1)
+	}
+
+	err = tx.Commit()
 	if err != nil {
 		log.Printf("ERROR(CREATE):%v", err)
 		os.Exit(1)
 	}
 }
 
-func ClearAllResources() {
-	db := GetConnection()
-	sql := `DELETE from resources`
-	tx := db.MustBegin()
-	tx.MustExec(sql)
+// TODO: should probably return error -  not have os.Exit
 
-	log.Println(sql)
-	err := tx.Commit()
+func ClearAllResources() {
+	db := GetPool()
+	sql := `DELETE from resources`
+
+	tx, err := db.Begin()
+	if err != nil {
+		log.Printf(">ERROR(DELETE):%v", err)
+		os.Exit(1)
+	}
+	_, err = tx.Exec(sql)
+
+	if err != nil {
+		log.Printf(">ERROR(DELETE):%v", err)
+		os.Exit(1)
+	}
+	err = tx.Commit()
+
 	if err != nil {
 		log.Printf(">ERROR(DELETE):%v", err)
 		os.Exit(1)
 	}
 }
 
+// TODO: should probably return error -  not have os.Exit
 func ClearResourceType(typeName string) {
-	db := GetConnection()
-	sql := `DELETE from resources`
+	db := GetPool()
 
+	sql := `DELETE from resources`
 	sql += fmt.Sprintf(" WHERE type='%s'", typeName)
 
-	tx := db.MustBegin()
-	tx.MustExec(sql)
+	tx, err := db.Begin()
+	if err != nil {
+		log.Printf(">error beginning transaction:%v", err)
+		os.Exit(1)
+	}
+	_, err = tx.Exec(sql)
 
-	log.Println(sql)
-	err := tx.Commit()
+	if err != nil {
+		log.Printf(">error executing sql:%v", err)
+		os.Exit(1)
+	}
+
+	err = tx.Commit()
 	if err != nil {
 		log.Printf(">ERROR(DELETE):%v", err)
 		os.Exit(1)
