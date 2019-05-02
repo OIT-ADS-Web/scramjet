@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -33,7 +32,7 @@ type Resource struct {
 
 // TODO: could just send in date - leave it up to library user
 // to determine how it's figured out
-func RetrieveResourceType(typeName string, updates bool) []Resource {
+func RetrieveResourceType(typeName string, updates bool) ([]Resource, error) {
 	db := GetPool()
 	resources := []Resource{}
 
@@ -52,6 +51,8 @@ func RetrieveResourceType(typeName string, updates bool) []Resource {
 		rows, _ := db.Query(sql, typeName, rounded)
 
 		for rows.Next() {
+			// TODO: maybe read into struct (value by value)
+			// to make this a little less verbose
 			var uri string
 			var typeName string
 			var hash string
@@ -101,9 +102,9 @@ func RetrieveResourceType(typeName string, updates bool) []Resource {
 	}
 
 	if err != nil {
-		log.Fatalf("retrieve resource type: %#v\n", err)
+		return nil, err
 	}
-	return resources
+	return resources, nil
 }
 
 //https://stackoverflow.com/questions/2377881/how-to-get-a-md5-hash-from-a-string-in-golang
@@ -130,7 +131,7 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 	err = dataB.Set(str)
 
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	res := &Resource{Uri: obj.Uri(),
@@ -155,16 +156,15 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 		_, err := tx.Exec(sql, res.Uri, res.Type, res.Hash, &res.Data, &res.DataB)
 
 		if err != nil {
-			log.Printf(">ERROR(INSERT):%v", err)
-			// exit here?
-			os.Exit(1)
+			return err
 		}
 	} else {
 
 		if strings.Compare(hash, found.Hash) == 0 {
-			fmt.Printf(">SKIPPING:%v\n", found.Uri)
+			// some kind of debug level?
+			log.Printf(">SKIPPING:%v\n", found.Uri)
 		} else {
-			fmt.Printf(">UPDATE:%v\n", found.Uri)
+			log.Printf(">UPDATE:%v\n", found.Uri)
 			sql := `UPDATE resources 
 	        set uri = $1, 
 		      type = $2, 
@@ -176,8 +176,7 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 			_, err := tx.Exec(sql, res.Uri, res.Type, res.Hash, &res.Data, &res.DataB)
 
 			if err != nil {
-				log.Printf(">ERROR(UPDATE):%v", err)
-				os.Exit(1)
+				return err
 			}
 		}
 	}
@@ -201,12 +200,12 @@ func ResourceTableExists() bool {
     )`
 	err := db.QueryRow(sqlExists, catalog).Scan(&exists)
 	if err != nil {
-		log.Printf("error checking if row exists %v", err)
-		os.Exit(1)
+		log.Fatalf("error checking if row exists %v", err)
 	}
 	return exists
 }
 
+/* NOTE: this calls Fatalf with errors */
 func MakeResourceSchema() {
 	// NOTE: using data AND data_b columns since binary json
 	// does NOT keep ordering, it would mess up
@@ -227,50 +226,45 @@ func MakeResourceSchema() {
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
-		os.Exit(1)
+		log.Fatalf(">error beginning transaction:%v", err)
 	}
 	_, err = tx.Exec(sql)
 
 	if err != nil {
-		log.Printf(">error executing sql:%v", err)
-		os.Exit(1)
+		log.Fatalf(">error executing sql:%v", err)
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		log.Printf("ERROR(CREATE):%v", err)
-		os.Exit(1)
+		log.Fatalf("ERROR(CREATE):%v", err)
 	}
 }
 
 // TODO: should probably return error -  not have os.Exit
 
-func ClearAllResources() {
+func ClearAllResources() (err error) {
 	db := GetPool()
 	sql := `DELETE from resources`
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf(">ERROR(DELETE):%v", err)
-		os.Exit(1)
+		return err
 	}
 	_, err = tx.Exec(sql)
 
 	if err != nil {
-		log.Printf(">ERROR(DELETE):%v", err)
-		os.Exit(1)
+		return err
 	}
 	err = tx.Commit()
 
 	if err != nil {
-		log.Printf(">ERROR(DELETE):%v", err)
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
 // TODO: should probably return error -  not have os.Exit
-func ClearResourceType(typeName string) {
+func ClearResourceType(typeName string) (err error) {
 	db := GetPool()
 
 	sql := `DELETE from resources`
@@ -278,19 +272,17 @@ func ClearResourceType(typeName string) {
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
-		os.Exit(1)
+		return err
 	}
 	_, err = tx.Exec(sql)
 
 	if err != nil {
-		log.Printf(">error executing sql:%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		log.Printf(">ERROR(DELETE):%v", err)
-		os.Exit(1)
+		return err
 	}
+	return nil
 }

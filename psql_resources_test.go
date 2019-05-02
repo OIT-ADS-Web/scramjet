@@ -56,11 +56,17 @@ func TestResourcesIngest(t *testing.T) {
 			t.Error("error unmarshalling json")
 		}
 		// one at a time
-		sj.SaveResource(per, typeName)
+		err = sj.SaveResource(per, typeName)
+		if err != nil {
+			t.Error("error saving record")
+		}
 	}
 
 	// TODO: need a better way to limit to updates
-	stashed := sj.RetrieveResourceType(typeName, false)
+	stashed, err := sj.RetrieveResourceType(typeName, false)
+	if err != nil {
+		t.Error("error stashing record")
+	}
 	// NOTE: not marked in db column yet
 	if len(stashed) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")

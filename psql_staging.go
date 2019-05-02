@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/jackc/pgx"
@@ -257,7 +256,7 @@ func BatchMarkInvalidInStaging(resources []StagingResource) {
 }
 
 // made lowercase same name to not export
-func batchMarkInvalidInStaging(resources []StagingResource) {
+func batchMarkInvalidInStaging(resources []StagingResource) (err error) {
 	// NOTE: this would need to only do 500 at a time
 	// because of SQL IN clause limit
 	db := GetPool()
@@ -279,36 +278,41 @@ func batchMarkInvalidInStaging(resources []StagingResource) {
 	tx, err := db.Begin()
 
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
+		//log.Printf(">error beginning transaction:%v", err)
 		// TODO: shouldn't exit in library
-		os.Exit(1)
+		//os.Exit(1)
+		return err
 	}
 	_, err = tx.Exec(sql)
 
 	if err != nil {
-		log.Printf(">ERROR(UPDATE):%v", err)
+		//log.Printf(">ERROR(UPDATE):%v", err)
 		// TODO: shouldn't exit in library
-		os.Exit(1)
+		//os.Exit(1)
+		return err
 	}
 	err = tx.Commit()
 	if err != nil {
-		log.Printf(">ERROR(UPDATE) - commit:%v", err)
+		//log.Printf(">ERROR(UPDATE) - commit:%v", err)
 		// TODO: shouldn't exit in library
-		os.Exit(1)
+		//os.Exit(1)
+		return err
 	}
+	return nil
 }
 
 // TODO: should probably batch these when validating and
 // mark valid, invalid in groups of 500 or something
-func MarkInvalidInStaging(res StagingResource) {
+func MarkInvalidInStaging(res StagingResource) (err error) {
 	db := GetPool()
 
 	tx, err := db.Begin()
 
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
+		//log.Printf(">error beginning transaction:%v", err)
 		// TODO: shouldn't exit in library
-		os.Exit(1)
+		//os.Exit(1)
+		return err
 	}
 
 	sql := `UPDATE staging
@@ -317,14 +321,12 @@ func MarkInvalidInStaging(res StagingResource) {
 
 	_, err = tx.Exec(sql, res.Id, res.Type)
 	if err != nil {
-		log.Printf(">ERROR(UPDATE):%v", err)
-		os.Exit(1)
+		return err
 	}
 	if err != nil {
-		log.Printf(">ERROR(UPDATE) - commit:%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
 //https://stackoverflow.com/questions/35179656/slice-chunking-in-go
@@ -351,7 +353,7 @@ func BatchMarkValidInStaging(resources []StagingResource) {
 }
 
 // okay to just not export?
-func batchMarkValidInStaging(resources []StagingResource) {
+func batchMarkValidInStaging(resources []StagingResource) (err error) {
 	// NOTE: this would need to only do 500-750 (or so) at a time
 	// because of SQL IN clause limit of 1000
 	db := GetPool()
@@ -372,33 +374,26 @@ func batchMarkValidInStaging(resources []StagingResource) {
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		return err
 	}
 	_, err = tx.Exec(sql)
 
 	if err != nil {
-		log.Printf(">ERROR(UPDATE):%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		return err
 	}
 	err = tx.Commit()
 	if err != nil {
-		log.Printf(">error committing transaction:%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
-func MarkValidInStaging(res StagingResource) {
+func MarkValidInStaging(res StagingResource) (err error) {
 	db := GetPool()
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		return err
 	}
 
 	sql := `UPDATE staging
@@ -407,42 +402,38 @@ func MarkValidInStaging(res StagingResource) {
 	_, err = tx.Exec(sql, res.Id, res.Type)
 
 	if err != nil {
-		log.Printf(">ERROR(UPDATE):%v", err)
-		os.Exit(1)
+		return err
 	}
 	err = tx.Commit()
 	if err != nil {
-		log.Printf(">error committing transaction:%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
-func DeleteFromStaging(res StagingResource) {
+func DeleteFromStaging(res StagingResource) (err error) {
 	db := GetPool()
 
 	sql := `DELETE from staging WHERE id = $1 AND type = $2`
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		return err
 	}
 	_, err = tx.Exec(sql, res.Id, res.Type)
 
 	if err != nil {
-		log.Printf(">ERROR(DELETE):%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		log.Printf(">error commiting transaction:%v", err)
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
+// NOTE: could call Fatalf
 func StagingTableExists() bool {
 	var exists bool
 	db := GetPool()
@@ -464,6 +455,7 @@ func StagingTableExists() bool {
 }
 
 // 'type' should match up to a schema
+// NOTE: could call Fatalf
 func MakeStagingSchema() {
 	sql := `create table staging (
         id text NOT NULL,
@@ -477,47 +469,42 @@ func MakeStagingSchema() {
 	db := GetPool()
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		log.Fatalf(">error beginning transaction:%v", err)
 	}
 	// NOTE: supposedly this is no-op if no error
 	defer tx.Rollback()
 
 	_, err = tx.Exec(sql)
 	if err != nil {
-		log.Printf("ERROR(CREATE):%v", err)
+		log.Fatalf("ERROR(CREATE):%v", err)
 	}
 	err = tx.Commit()
 	if err != nil {
-		log.Printf(">error commiting transaction:%v", err)
-		os.Exit(1)
+		log.Fatalf(">error commiting transaction:%v", err)
 	}
 
 }
 
-func ClearAllStaging() {
+func ClearAllStaging() (err error) {
 	db := GetPool()
 
 	sql := `DELETE from staging`
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		return err
 	}
 	_, err = tx.Exec(sql)
 	if err != nil {
-		log.Fatalf(">ERROR(DELETE):%v", err)
+		return err
 	}
 	err = tx.Commit()
 	if err != nil {
-		log.Printf(">error commiting transaction:%v", err)
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
-func ClearStagingType(typeName string) {
+func ClearStagingType(typeName string) (err error) {
 	db := GetPool()
 
 	sql := `DELETE from staging`
@@ -526,60 +513,55 @@ func ClearStagingType(typeName string) {
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		return err
 	}
 	_, err = tx.Exec(sql)
 	if err != nil {
-		log.Fatalf(">ERROR(DELETE):%v", err)
+		return err
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		log.Printf(">error commiting transaction:%v", err)
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
 // only add (presumed existence already checked)
-func AddStagingResource(obj interface{}, id string, typeName string) {
+func AddStagingResource(obj interface{}, id string, typeName string) (err error) {
 	db := GetPool()
 
 	str, err := json.Marshal(obj)
 	if err != nil {
-		log.Printf("error adding to staging: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	res := &StagingResource{Id: id, Type: typeName, Data: str}
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		return err
 	}
 	sql := `INSERT INTO STAGING (id, type, data) 
 	      VALUES ($1, $2, $3)`
 	_, err = tx.Exec(sql, res.Id, res.Type, res.Data)
 
 	if err != nil {
-		log.Fatalf(">ERROR(INSERT):%v\n", err)
+		return err
 	}
 	err = tx.Commit()
 	if err != nil {
-		log.Printf(">error commiting transaction:%v", err)
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
-func SaveStagingResource(obj Identifiable, typeName string) {
+func SaveStagingResource(obj Identifiable, typeName string) (err error) {
 	db := GetPool()
 
 	str, err := json.Marshal(obj)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	//var found StagingResource
@@ -596,9 +578,7 @@ func SaveStagingResource(obj Identifiable, typeName string) {
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Printf(">error beginning transaction:%v", err)
-		// TODO: shouldn't exit in library
-		os.Exit(1)
+		return err
 	}
 
 	// supposedly no-op if no problems
@@ -611,7 +591,7 @@ func SaveStagingResource(obj Identifiable, typeName string) {
 		_, err := tx.Exec(sql, res.Id, res.Type, res.Data)
 
 		if err != nil {
-			log.Fatalf(">ERROR(INSERT):%v\n", err)
+			return err
 		}
 	} else {
 		sql := `UPDATE staging
@@ -623,16 +603,18 @@ func SaveStagingResource(obj Identifiable, typeName string) {
 		_, err = tx.Exec(sql, res.Id, res.Type, res.Data)
 
 		if err != nil {
-			log.Fatalf(">ERROR(UPDATE):%v\n", err)
+			return err
 		}
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		log.Fatalf(">ERROR commiting transaction:%v\n", err)
+		return err
 	}
+	return nil
 }
 
+// returns false if error - maybe should not
 func StagingResourceExists(uri string, typeName string) bool {
 	var exists bool
 	db := GetPool()
@@ -686,7 +668,8 @@ func BulkAddStaging(typeName string, items ...Identifiable) error {
 	for _, item := range list {
 		str, err := json.Marshal(item)
 		if err != nil {
-			log.Fatalln(err)
+			// return? or let continue loop
+			continue
 		}
 		res := &StagingResource{Id: item.Identifier(), Type: typeName, Data: str}
 		resources = append(resources, *res)
@@ -709,7 +692,7 @@ func BulkAddStaging(typeName string, items ...Identifiable) error {
 	_, err = tx.Exec(tmpSql)
 
 	if err != nil {
-		fmt.Printf("err bulk adding=%v\n", err)
+		return errors.Wrap(err, "creating temporary table")
 	}
 
 	// NOTE: don't commit yet (see ON COMMIT DROP)
@@ -724,7 +707,7 @@ func BulkAddStaging(typeName string, items ...Identifiable) error {
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
-		log.Fatalf("err copying from=%v\n", err)
+		return err
 	}
 	sql2 := `INSERT INTO staging (id, type, data)
 	  SELECT id, type, data FROM staging_data_tmp
@@ -734,13 +717,11 @@ func BulkAddStaging(typeName string, items ...Identifiable) error {
 	_, err = tx.Exec(sql2)
 
 	if err != nil {
-		fmt.Printf("%v\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		fmt.Printf("error commiting: %v\n", err)
 		return errors.Wrap(err, "commit transaction")
 	}
 	return nil

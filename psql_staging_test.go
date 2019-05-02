@@ -75,7 +75,10 @@ func TestStagingIngest(t *testing.T) {
 	person := &TestPerson{Id: "per0000001", Name: "Test"}
 	typeName := "person"
 	// 1. save
-	sj.SaveStagingResource(person, typeName)
+	err := sj.SaveStagingResource(person, typeName)
+	if err != nil {
+		t.Error("error saving record")
+	}
 	// 2. retrieve
 	exists := sj.StagingResourceExists("per0000001", "person")
 	if exists != true {
@@ -91,7 +94,11 @@ func TestStagingListValid(t *testing.T) {
 	person := &TestPerson{Id: "per0000001", Name: "Test"}
 	typeName := "person"
 	// 1. save
-	sj.SaveStagingResource(person, typeName)
+	err := sj.SaveStagingResource(person, typeName)
+	if err != nil {
+		t.Error("could not save record")
+	}
+
 	// 2. retrieve
 	alwaysOkay := func(json string) bool { return true }
 	list, rejects := sj.FilterTypeStaging("person", alwaysOkay)
@@ -111,7 +118,10 @@ func TestStagingListInValid(t *testing.T) {
 	person := &TestPerson{Id: "per0000001", Name: "Test"}
 	typeName := "person"
 	// 1. save
-	sj.SaveStagingResource(person, typeName)
+	err := sj.SaveStagingResource(person, typeName)
+	if err != nil {
+		t.Error("could not save record")
+	}
 	// 2. retrieve
 	alwaysOkay := func(json string) bool { return false }
 	list, rejects := sj.FilterTypeStaging("person", alwaysOkay)
