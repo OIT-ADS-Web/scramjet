@@ -485,6 +485,24 @@ func MakeStagingSchema() {
 
 }
 
+func DropStaging() error {
+	db := GetPool()
+	sql := `DROP table IF EXISTS staging`
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(sql)
+	if err != nil {
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func ClearAllStaging() (err error) {
 	db := GetPool()
 

@@ -30,9 +30,18 @@ func setup() {
 		log.Fatal("cannot connect to database")
 	}
 
+	err = sj.DropStaging()
+	if err != nil {
+		log.Fatalf("cannot delete staging database %s\n", err)
+	}
+
 	if !sj.StagingTableExists() {
 		fmt.Println("staging table not found")
 		sj.MakeStagingSchema()
+	}
+	err = sj.DropResources()
+	if err != nil {
+		log.Fatal("cannot delete resources database")
 	}
 	if !sj.ResourceTableExists() {
 		fmt.Println("resources table not found")
@@ -40,8 +49,8 @@ func setup() {
 	}
 
 	// empty everything out for tests
-	sj.ClearAllStaging()
-	sj.ClearAllResources()
+	//sj.ClearAllStaging()
+	//sj.ClearAllResources()
 }
 
 func shutdown() {

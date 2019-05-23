@@ -38,7 +38,8 @@ import (
     sj.BatchMarkInValidInStaging(rejects)
 
     // 3) Now the valid ones are marked and ready to go into
-    //    'resource' table 
+    //    'resource' table
+
     ...
 
 
@@ -82,3 +83,19 @@ import (
 # as executable (CLI)
 
 
+# General Idea
+
+two tables, `staging` and `resources`
+
+* staging: [id+type=uid]
+
+  actions:
+  * stash ->
+  * validate -> 
+  * stash and validate ->
+
+* resources: [uri(type)=uid]
+
+  actions:
+  * move over valid (could be updates)
+  * get actual updates (only)

@@ -223,7 +223,8 @@ func MakeResourceSchema() {
         data_b jsonb NOT NULL,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
-        PRIMARY KEY(uri, type)
+		PRIMARY KEY(uri, type),
+		CONSTRAINT uniq_uri_hash UNIQUE (uri, type, hash)
     )`
 
 	db := GetPool()
@@ -245,6 +246,24 @@ func MakeResourceSchema() {
 }
 
 // TODO: should probably return error -  not have os.Exit
+
+func DropResources() error {
+	db := GetPool()
+	sql := `DROP table IF EXISTS resources`
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(sql)
+	if err != nil {
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 func ClearAllResources() (err error) {
 	db := GetPool()
@@ -382,7 +401,7 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	sql2 := `INSERT INTO resources (uri, type, hash, data, data_b)
 	  SELECT uri, type, hash, data, data_b 
 	  FROM resource_data_tmp
-	  ON CONFLICT (uri, type) DO UPDATE SET data = EXCLUDED.data, 
+	  ON CONFLICT (uri, type, hash) DO UPDATE SET data = EXCLUDED.data, 
 	  data_b = EXCLUDED.data_b, hash = EXCLUDED.hash, 
 	  updated_at = NOW()
 	`
