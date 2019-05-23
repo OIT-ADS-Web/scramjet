@@ -44,9 +44,6 @@ var statements = map[string]string{
 	*/
 }
 
-// should be config value
-var maxDBConnections = 4
-
 func MakeConnectionPool(conf Config) error {
 	var err error
 
@@ -60,11 +57,12 @@ func MakeConnectionPool(conf Config) error {
 			Port:     uint16(conf.Database.Port),
 		}
 
+		timeout := time.Duration(conf.Database.AcquireTimeout) * time.Second
 		connPool, dbErr := pgx.NewConnPool(pgx.ConnPoolConfig{
 			ConnConfig:     connConfig,
 			AfterConnect:   nil,
-			MaxConnections: 20,
-			AcquireTimeout: 30 * time.Second,
+			MaxConnections: conf.Database.MaxConnections,
+			AcquireTimeout: timeout,
 		})
 
 		if dbErr != nil {

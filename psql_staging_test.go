@@ -12,18 +12,18 @@ import (
 func setup() {
 	// TODO: probably better way to do this
 	database := sj.DatabaseInfo{
-		Server:   "localhost",
-		Database: "docker",
-		Password: "docker",
-		Port:     5432,
-		User:     "docker",
+		Server:         "localhost",
+		Database:       "docker",
+		Password:       "docker",
+		Port:           5432,
+		User:           "docker",
+		MaxConnections: 1,
+		AcquireTimeout: 30,
 	}
 	config := sj.Config{
 		Database: database,
 	}
 
-	// NOTE: this just makes connection
-	//err := sj.MakeConnection(config)
 	err := sj.MakeConnectionPool(config)
 
 	if err != nil {
@@ -67,7 +67,7 @@ func (tp TestPerson) Identifier() string {
 }
 
 func (tp TestPerson) Uri() string {
-	return fmt.Sprintf("https://scholars.duke.edu/individual/per%s", tp.Identifier())
+	return fmt.Sprintf("https://scholars.duke.edu/individual/%s", tp.Identifier())
 }
 
 func TestStagingIngest(t *testing.T) {

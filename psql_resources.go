@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/pgtype"
+	"github.com/pkg/errors"
 )
 
 // this is the raw structure in the database
@@ -32,13 +34,13 @@ type Resource struct {
 
 // TODO: could just send in date - leave it up to library user
 // to determine how it's figured out
-func RetrieveResourceType(typeName string, updates bool) ([]Resource, error) {
+func RetrieveResourceType(typeName string, updatesOnly bool) ([]Resource, error) {
 	db := GetPool()
 	resources := []Resource{}
 
 	// need better way to find 'last run'
 	var err error
-	if updates {
+	if updatesOnly {
 		// TODO: ideally would need to record time last run somewhere
 		yesterday := time.Now().AddDate(0, 0, -1)
 		rounded := time.Date(yesterday.Year(), yesterday.Month(),
@@ -114,6 +116,7 @@ func makeHash(text string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
+// FIXME: would like a way to do multiple at a time - some kind of upsert?
 func SaveResource(obj UriAddressable, typeName string) (err error) {
 	str, err := json.Marshal(obj)
 	if err != nil {
@@ -142,7 +145,7 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 
 	findSQL := `SELECT uri, type, hash, data, data_b  
 	  FROM resources 
-		WHERE (uri = $1 AND type = $2)
+	  WHERE (uri = $1 AND type = $2)
 	`
 
 	row := db.QueryRow(findSQL, obj.Uri(), typeName)
@@ -151,6 +154,7 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 	tx, err := db.Begin()
 
 	if notFoundError != nil {
+		// TODO: created_at, updated_at
 		sql := `INSERT INTO resources (uri, type, hash, data, data_b) 
 	      VALUES ($1, $2, $3, $4, $5)`
 		_, err := tx.Exec(sql, res.Uri, res.Type, res.Hash, &res.Data, &res.DataB)
@@ -283,6 +287,117 @@ func ClearResourceType(typeName string) (err error) {
 	err = tx.Commit()
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func uniqueUri(idSlice []UriAddressable) []UriAddressable {
+	keys := make(map[UriAddressable]bool)
+	list := []UriAddressable{}
+	for _, entry := range idSlice {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+
+// add many at a time (upsert)
+func BulkAddResources(typeName string, items ...UriAddressable) error {
+	var resources = make([]Resource, 0)
+	var err error
+	// NOTE: not sure if these are necessary
+	list := uniqueUri(items)
+
+	for _, item := range list {
+		str, err := json.Marshal(item)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		hash := makeHash(string(str))
+
+		var data pgtype.JSON
+		var dataB pgtype.JSONB
+		err = data.Set(str)
+		err = dataB.Set(str)
+
+		if err != nil {
+			return err
+		}
+
+		res := &Resource{Uri: item.Uri(),
+			Type:  typeName,
+			Hash:  hash,
+			Data:  data,
+			DataB: dataB}
+		resources = append(resources, *res)
+	}
+
+	db := GetPool()
+
+	tx, err := db.Begin()
+	if err != nil {
+		log.Printf("error starting transaction =%v\n", err)
+	}
+
+	// supposedly no-op if everything okay
+	defer tx.Rollback()
+
+	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
+	  (uri text NOT NULL, type text NOT NULL, hash text NOT NULL,
+		data json NOT NULL, data_b jsonb NOT NULL,
+		created_at TIMESTAMP DEFAULT NOW(), 
+		updated_at TIMESTAMP DEFAULT NOW()
+	  )
+	  ON COMMIT DROP
+	`
+	_, err = tx.Exec(tmpSql)
+
+	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "creating temporary table")
+	}
+
+	// NOTE: don't commit yet (see ON COMMIT DROP)
+	inputRows := [][]interface{}{}
+	for _, res := range resources {
+		inputRows = append(inputRows, []interface{}{res.Uri,
+			res.Type,
+			res.Hash,
+			&res.Data,
+			&res.DataB})
+	}
+
+	_, err = tx.CopyFrom(pgx.Identifier{"resource_data_tmp"},
+		[]string{"uri", "type", "hash", "data", "data_b"},
+		pgx.CopyFromRows(inputRows))
+
+	if err != nil {
+		fmt.Printf("error=%s\n", err)
+		return err
+	}
+	// how to set 'updated_at' date here?
+	sql2 := `INSERT INTO resources (uri, type, hash, data, data_b)
+	  SELECT uri, type, hash, data, data_b 
+	  FROM resource_data_tmp
+	  ON CONFLICT (uri, type) DO UPDATE SET data = EXCLUDED.data, 
+	  data_b = EXCLUDED.data_b, hash = EXCLUDED.hash, 
+	  updated_at = NOW()
+	`
+
+	_, err = tx.Exec(sql2)
+
+	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "move from temporary to real table")
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "commit transaction")
 	}
 	return nil
 }

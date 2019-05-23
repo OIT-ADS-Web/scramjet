@@ -9,6 +9,7 @@ import (
 	sj "gitlab.oit.duke.edu/scholars/staging_importer"
 )
 
+// make this a server?
 func main() {
 	var conf sj.Config
 
@@ -17,6 +18,8 @@ func main() {
 	dbDatabase := flag.String("DB_DATABASE", "", "database database")
 	dbUser := flag.String("DB_USER", "", "database user")
 	dbPassword := flag.String("DB_PASSWORD", "", "database password")
+	dbMaxConnections := flag.Int("DB_MAX_CONNECTIONS", 1, "database maximum pool conections")
+	dbAquireTimeout := flag.Int("DB_ACQUIRE_TIMEOUT", 30, "how many seconds to wait to get connection")
 
 	flag.Parse()
 
@@ -24,11 +27,13 @@ func main() {
 		log.Fatal("database credentials need to be set")
 	} else {
 		database := sj.DatabaseInfo{
-			Server:   *dbServer,
-			Database: *dbDatabase,
-			Password: *dbPassword,
-			Port:     *dbPort,
-			User:     *dbUser,
+			Server:         *dbServer,
+			Database:       *dbDatabase,
+			Password:       *dbPassword,
+			Port:           *dbPort,
+			User:           *dbUser,
+			MaxConnections: *dbMaxConnections,
+			AcquireTimeout: *dbAquireTimeout,
 		}
 		conf = sj.Config{
 			Database: database,

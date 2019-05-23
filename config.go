@@ -6,9 +6,11 @@ type Config struct {
 }
 
 type DatabaseInfo struct {
-	Server   string
-	Port     int
-	Database string
-	User     string
-	Password string
+	Server         string
+	Port           int
+	Database       string
+	User           string
+	Password       string
+	MaxConnections int
+	AcquireTimeout int
 }
