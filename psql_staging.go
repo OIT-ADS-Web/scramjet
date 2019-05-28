@@ -651,12 +651,15 @@ func StagingResourceExists(uri string, typeName string) bool {
 // stole code from here:
 //https://stackoverflow.com/questions/12486436/
 
+// NOTE: was getting "widgets_import.Person is not hashable" trying
+// to call (even though tests seemed to work) - so changing
+// the hash to the Identifier() seemed to fix that
 func unique(idSlice []Identifiable) []Identifiable {
-	keys := make(map[Identifiable]bool)
+	keys := make(map[string]bool)
 	list := []Identifiable{}
 	for _, entry := range idSlice {
-		if _, value := keys[entry]; !value {
-			keys[entry] = true
+		if _, value := keys[entry.Identifier()]; !value {
+			keys[entry.Identifier()] = true
 			list = append(list, entry)
 		}
 	}
