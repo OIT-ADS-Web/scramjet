@@ -311,11 +311,11 @@ func ClearResourceType(typeName string) (err error) {
 }
 
 func uniqueUri(idSlice []UriAddressable) []UriAddressable {
-	keys := make(map[UriAddressable]bool)
+	keys := make(map[string]bool)
 	list := []UriAddressable{}
 	for _, entry := range idSlice {
-		if _, value := keys[entry]; !value {
-			keys[entry] = true
+		if _, value := keys[entry.Uri()]; !value {
+			keys[entry.Uri()] = true
 			list = append(list, entry)
 		}
 	}
