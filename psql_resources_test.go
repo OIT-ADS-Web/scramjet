@@ -63,7 +63,7 @@ func TestResourcesIngest(t *testing.T) {
 	}
 
 	// TODO: need a better way to limit to updates
-	stashed, err := sj.RetrieveResourceType(typeName, false)
+	stashed, err := sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error stashing record")
 	}
@@ -116,7 +116,7 @@ func TestBatchResources(t *testing.T) {
 
 	err = sj.BulkAddResources(typeName, resources...)
 	// false = not updates only
-	existing, err := sj.RetrieveResourceType(typeName, false)
+	existing, err := sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error stashing record")
 	}

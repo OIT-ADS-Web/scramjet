@@ -34,72 +34,35 @@ type Resource struct {
 
 // TODO: could just send in date - leave it up to library user
 // to determine how it's figured out
-func RetrieveResourceType(typeName string, updatesOnly bool) ([]Resource, error) {
+func RetrieveTypeResources(typeName string) ([]Resource, error) {
 	db := GetPool()
 	resources := []Resource{}
 
-	// need better way to find 'last run'
 	var err error
-	if updatesOnly {
-		// TODO: ideally would need to record time last run somewhere
-		yesterday := time.Now().AddDate(0, 0, -1)
-		rounded := time.Date(yesterday.Year(), yesterday.Month(),
-			yesterday.Day(), 0, 0, 0, 0, yesterday.Location())
-
-		sql := `SELECT uri, type, hash, data 
-		FROM resources 
-		WHERE type =  $1 and updated_at >= $2
-      `
-		rows, _ := db.Query(sql, typeName, rounded)
-
-		for rows.Next() {
-			// TODO: maybe read into struct (value by value)
-			// to make this a little less verbose
-			var uri string
-			var typeName string
-			var hash string
-			var json pgtype.JSON
-			var jsonB pgtype.JSONB
-
-			err = rows.Scan(&uri, &typeName, &hash, &json, &jsonB)
-			res := Resource{Uri: uri,
-				Type:  typeName,
-				Hash:  hash,
-				Data:  json,
-				DataB: jsonB}
-			resources = append(resources, res)
-
-			if err != nil {
-				// is this the correct thing to do?
-				continue
-			}
-		}
-	} else {
-		sql := `SELECT uri, type, hash, data, data_b
+	sql := `SELECT uri, type, hash, data, data_b
 		FROM resources 
 		WHERE type =  $1
 		`
-		rows, _ := db.Query(sql, typeName)
+	rows, _ := db.Query(sql, typeName)
 
-		for rows.Next() {
-			var uri string
-			var typeName string
-			var hash string
-			var json pgtype.JSON
-			var jsonB pgtype.JSONB
+	for rows.Next() {
+		var uri string
+		var typeName string
+		var hash string
+		var json pgtype.JSON
+		var jsonB pgtype.JSONB
 
-			err = rows.Scan(&uri, &typeName, &hash, &json, &jsonB)
-			res := Resource{Uri: uri,
-				Type:  typeName,
-				Hash:  hash,
-				Data:  json,
-				DataB: jsonB}
-			resources = append(resources, res)
+		err = rows.Scan(&uri, &typeName, &hash, &json, &jsonB)
+		res := Resource{Uri: uri,
+			Type:  typeName,
+			Hash:  hash,
+			Data:  json,
+			DataB: jsonB}
+		resources = append(resources, res)
 
-			if err != nil {
-				// is this the correct thing to do?
-				continue
-			}
+		if err != nil {
+			// is this the correct thing to do?
+			continue
 		}
 	}
 
@@ -382,11 +345,19 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	// NOTE: don't commit yet (see ON COMMIT DROP)
 	inputRows := [][]interface{}{}
 	for _, res := range resources {
+		x := []byte{}
+		readError := res.Data.AssignTo(&x)
+
+		if readError != nil {
+			// do something else here, mark error somewhere?
+			fmt.Printf("skipping %s:%s\n", res.Uri, readError)
+			continue
+		}
 		inputRows = append(inputRows, []interface{}{res.Uri,
 			res.Type,
 			res.Hash,
-			&res.Data,
-			&res.DataB})
+			x,
+			x})
 	}
 
 	_, err = tx.CopyFrom(pgx.Identifier{"resource_data_tmp"},
@@ -401,7 +372,7 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	sql2 := `INSERT INTO resources (uri, type, hash, data, data_b)
 	  SELECT uri, type, hash, data, data_b 
 	  FROM resource_data_tmp
-	  ON CONFLICT (uri, type, hash) DO UPDATE SET data = EXCLUDED.data, 
+		ON CONFLICT (uri, type) DO UPDATE SET data = EXCLUDED.data, 
 	  data_b = EXCLUDED.data_b, hash = EXCLUDED.hash, 
 	  updated_at = NOW()
 	`
