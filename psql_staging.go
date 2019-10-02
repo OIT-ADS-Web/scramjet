@@ -747,3 +747,56 @@ func BulkAddStaging(typeName string, items ...Identifiable) error {
 	}
 	return nil
 }
+
+func BulkAddStagingResources(typeName string, resources ...StagingResource) error {
+	db := GetPool()
+
+	tx, err := db.Begin()
+	if err != nil {
+		fmt.Printf("error starting transaction =%v\n", err)
+	}
+
+	// supposedly no-op if everything okay
+	defer tx.Rollback()
+
+	tmpSql := `CREATE TEMPORARY TABLE staging_data_tmp
+	  (id text NOT NULL, type text NOT NULL, data json NOT NULL)
+	  ON COMMIT DROP
+	`
+	_, err = tx.Exec(tmpSql)
+
+	if err != nil {
+		return errors.Wrap(err, "creating temporary table")
+	}
+
+	// NOTE: don't commit yet (see ON COMMIT DROP)
+
+	inputRows := [][]interface{}{}
+	for _, res := range resources {
+		inputRows = append(inputRows, []interface{}{res.Id, res.Type, res.Data})
+	}
+
+	_, err = tx.CopyFrom(pgx.Identifier{"staging_data_tmp"},
+		[]string{"id", "type", "data"},
+		pgx.CopyFromRows(inputRows))
+
+	if err != nil {
+		return err
+	}
+	sql2 := `INSERT INTO staging (id, type, data)
+	  SELECT id, type, data FROM staging_data_tmp
+	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data
+	`
+
+	_, err = tx.Exec(sql2)
+
+	if err != nil {
+		return errors.Wrap(err, "move from temporary to real table")
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return errors.Wrap(err, "commit transaction")
+	}
+	return nil
+}
