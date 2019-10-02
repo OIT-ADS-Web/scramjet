@@ -391,3 +391,108 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	}
 	return nil
 }
+
+func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ...StagingResource) error {
+	var resources = make([]Resource, 0)
+	var err error
+	// NOTE: not sure if these are necessary
+	//list := uniqueUri(items)
+
+	for _, item := range items {
+		str := item.Data
+		uri := uriMaker(item)
+
+		hash := makeHash(string(str))
+
+		var data pgtype.JSON
+		var dataB pgtype.JSONB
+		err = data.Set(str)
+		err = dataB.Set(str)
+	
+		if err != nil {
+			return err
+		}
+	
+		res := &Resource{Uri: uri,
+			Type:  typeName,
+			Hash:  hash,
+			Data:  data,
+			DataB: dataB}
+		resources = append(resources, *res)	
+	}
+    
+	db := GetPool()
+
+	tx, err := db.Begin()
+	if err != nil {
+		log.Printf("error starting transaction =%v\n", err)
+	}
+
+	// supposedly no-op if everything okay
+	defer tx.Rollback()
+
+	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
+	  (uri text NOT NULL, type text NOT NULL, hash text NOT NULL,
+		data json NOT NULL, data_b jsonb NOT NULL,
+		created_at TIMESTAMP DEFAULT NOW(), 
+		updated_at TIMESTAMP DEFAULT NOW()
+	  )
+	  ON COMMIT DROP
+	`
+	_, err = tx.Exec(tmpSql)
+
+	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "creating temporary table")
+	}
+
+	// NOTE: don't commit yet (see ON COMMIT DROP)
+	inputRows := [][]interface{}{}
+	for _, res := range resources {
+		x := []byte{}
+		readError := res.Data.AssignTo(&x)
+
+		if readError != nil {
+			// do something else here, mark error somewhere?
+			fmt.Printf("skipping %s:%s\n", res.Uri, readError)
+			continue
+		}
+		inputRows = append(inputRows, []interface{}{res.Uri,
+			res.Type,
+			res.Hash,
+			x,
+			x})
+	}
+
+	_, err = tx.CopyFrom(pgx.Identifier{"resource_data_tmp"},
+		[]string{"uri", "type", "hash", "data", "data_b"},
+		pgx.CopyFromRows(inputRows))
+
+	if err != nil {
+		fmt.Printf("error=%s\n", err)
+		return err
+	}
+	// how to set 'updated_at' date here?
+	sql2 := `INSERT INTO resources (uri, type, hash, data, data_b)
+	  SELECT uri, type, hash, data, data_b 
+	  FROM resource_data_tmp
+		ON CONFLICT (uri, type) DO UPDATE SET data = EXCLUDED.data, 
+	  data_b = EXCLUDED.data_b, hash = EXCLUDED.hash, 
+	  updated_at = NOW()
+	`
+
+	_, err = tx.Exec(sql2)
+
+	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "move from temporary to real table")
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "commit transaction")
+	}
+	return nil
+}
+

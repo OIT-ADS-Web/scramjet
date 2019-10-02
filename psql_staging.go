@@ -632,6 +632,65 @@ func SaveStagingResource(obj Identifiable, typeName string) (err error) {
 	return nil
 }
 
+func SaveStagingResourceDirect(res StagingResource, typeName string) (err error) {
+	db := GetPool()
+
+	//str, err := json.Marshal(obj)
+	//if err != nil {
+	//	return err
+	//}
+
+	//var found StagingResource
+	//res := &StagingResource{Id: obj.Identifier(), Type: typeName, Data: str}
+
+	findSql := `SELECT id FROM staging
+	  WHERE (id = $1 AND type = $2)`
+
+	row := db.QueryRow(findSql, res.Id, typeName)
+
+	// NOTE: can't scan into structs
+	var foundId string
+	notFoundError := row.Scan(&foundId)
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	// supposedly no-op if no problems
+	defer tx.Rollback()
+
+	// e.g. if not found???
+	if notFoundError != nil {
+		sql := `INSERT INTO staging (id, type, data) 
+	      VALUES ($1, $2, $3)`
+		_, err := tx.Exec(sql, res.Id, res.Type, res.Data)
+
+		if err != nil {
+			return err
+		}
+	} else {
+		sql := `UPDATE staging
+	  set id = $1, 
+		type = $2, 
+		data = $3,
+		is_valid = null
+		WHERE id = $1 and type = $2`
+		_, err = tx.Exec(sql, res.Id, res.Type, res.Data)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+
 // returns false if error - maybe should not
 func StagingResourceExists(uri string, typeName string) bool {
 	var exists bool
