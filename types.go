@@ -9,3 +9,5 @@ type Identifiable interface {
 }
 
 type ValidatorFunc func(json string) bool
+
+type UriFunc func(res StagingResource) string

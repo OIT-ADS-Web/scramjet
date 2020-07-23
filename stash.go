@@ -21,6 +21,8 @@ type StagingStasher interface {
 	Items() map[string][]Identifiable
 	AddItems(string, ...Identifiable)
 	StashItems()
+	// AddRows()
+	// StashRows()
 }
 
 type stagingStasher struct {
