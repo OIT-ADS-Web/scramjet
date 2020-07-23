@@ -72,6 +72,45 @@ func RetrieveTypeResources(typeName string) ([]Resource, error) {
 	return resources, nil
 }
 
+func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error) {
+	db := GetPool()
+	resources := []Resource{}
+
+	var err error
+	sql := `SELECT uri, type, hash, data, data_b
+		FROM resources 
+		WHERE type =  $1
+		LIMIT $2
+		`
+	rows, _ := db.Query(sql, typeName, limit)
+
+	for rows.Next() {
+		var uri string
+		var typeName string
+		var hash string
+		var json pgtype.JSON
+		var jsonB pgtype.JSONB
+
+		err = rows.Scan(&uri, &typeName, &hash, &json, &jsonB)
+		res := Resource{Uri: uri,
+			Type:  typeName,
+			Hash:  hash,
+			Data:  json,
+			DataB: jsonB}
+		resources = append(resources, res)
+
+		if err != nil {
+			// is this the correct thing to do?
+			continue
+		}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return resources, nil
+}
+
 //https://stackoverflow.com/questions/2377881/how-to-get-a-md5-hash-from-a-string-in-golang
 func makeHash(text string) string {
 	hasher := md5.New()
