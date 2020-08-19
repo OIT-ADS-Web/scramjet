@@ -101,6 +101,9 @@ two tables, `staging` and `resources`
   * get actual updates (only)
 
 
+# Basic structure
 ![image of basic structure](docs/ScramjetBasic.png "A diagram of basic ideas")
 
+
+# Tables
 ![image of tables](docs/ScramjetTables.png "A diagram of table structure")
