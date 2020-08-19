@@ -99,3 +99,8 @@ two tables, `staging` and `resources`
   actions:
   * move over valid (could be updates)
   * get actual updates (only)
+
+
+![image of basic structure](docs/ScramjetBasic.png "A diagram of basic ideas")
+
+![image of tables](docs/ScramjetTables.png "A diagram of table structure")
