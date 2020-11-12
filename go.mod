@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/cockroachdb/apd v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1
+	github.com/gorilla/mux v1.7.4
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgx v3.3.0+incompatible
 	github.com/jmoiron/sqlx v1.2.0

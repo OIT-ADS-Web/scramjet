@@ -632,6 +632,7 @@ func SaveStagingResource(obj Identifiable, typeName string) (err error) {
 	return nil
 }
 
+
 func SaveStagingResourceDirect(res StagingResource, typeName string) (err error) {
 	db := GetPool()
 

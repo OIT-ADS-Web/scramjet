@@ -4,5 +4,6 @@
 .env
 cmd/staging_importer/staging_importer
 .vscode
+cmd/scramjet/scramjet
 #cmd/vivo-scramjet-server/vivo-scramjet-server
 #cmd/vivo-scramjet-cli/vivo-scramjet-cli
