@@ -632,7 +632,6 @@ func SaveStagingResource(obj Identifiable, typeName string) (err error) {
 	return nil
 }
 
-
 func SaveStagingResourceDirect(res StagingResource, typeName string) (err error) {
 	db := GetPool()
 
@@ -691,7 +690,6 @@ func SaveStagingResourceDirect(res StagingResource, typeName string) (err error)
 	return nil
 }
 
-
 // returns false if error - maybe should not
 func StagingResourceExists(uri string, typeName string) bool {
 	var exists bool
@@ -726,20 +724,6 @@ func unique(idSlice []Identifiable) []Identifiable {
 	return list
 }
 
-/*
-func removeNulls(idSlice []Identifiable) []Identifiable {
-	list := []Identifiable{}
-	for _, entry := range idSlice {
-		fmt.Printf("identifer=%v\n", entry.Identifier())
-		if entry.Identifier() != "" {
-			list = append(list, entry)
-		}
-	}
-	return list
-}
-*/
-
-// TODO: not sure how this scales with 100,000+ records
 func BulkAddStaging(typeName string, items ...Identifiable) error {
 	var resources = make([]StagingResource, 0)
 	var err error

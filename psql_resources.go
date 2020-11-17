@@ -133,8 +133,11 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 	var data pgtype.JSON
 	var dataB pgtype.JSONB
 	err = data.Set(str)
-	err = dataB.Set(str)
 
+	if err != nil {
+		return err
+	}
+	err = dataB.Set(str)
 	if err != nil {
 		return err
 	}
@@ -155,6 +158,7 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 
 	tx, err := db.Begin()
 
+	// either insert or update
 	if notFoundError != nil {
 		// TODO: created_at, updated_at
 		sql := `INSERT INTO resources (uri, type, hash, data, data_b) 
@@ -188,6 +192,7 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 	}
 
 	err = tx.Commit()
+	// TODO: return :insert or :update (or nil)
 	return err
 }
 
@@ -342,6 +347,11 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 		var data pgtype.JSON
 		var dataB pgtype.JSONB
 		err = data.Set(str)
+
+		if err != nil {
+			return err
+		}
+
 		err = dataB.Set(str)
 
 		if err != nil {
@@ -407,7 +417,6 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 		fmt.Printf("error=%s\n", err)
 		return err
 	}
-	// how to set 'updated_at' date here?
 	sql2 := `INSERT INTO resources (uri, type, hash, data, data_b)
 	  SELECT uri, type, hash, data, data_b 
 	  FROM resource_data_tmp
@@ -434,8 +443,6 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ...StagingResource) error {
 	var resources = make([]Resource, 0)
 	var err error
-	// NOTE: not sure if these are necessary
-	//list := uniqueUri(items)
 
 	for _, item := range items {
 		str := item.Data
@@ -446,20 +453,25 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 		var data pgtype.JSON
 		var dataB pgtype.JSONB
 		err = data.Set(str)
-		err = dataB.Set(str)
-	
+
 		if err != nil {
 			return err
 		}
-	
+
+		err = dataB.Set(str)
+
+		if err != nil {
+			return err
+		}
+
 		res := &Resource{Uri: uri,
 			Type:  typeName,
 			Hash:  hash,
 			Data:  data,
 			DataB: dataB}
-		resources = append(resources, *res)	
+		resources = append(resources, *res)
 	}
-    
+
 	db := GetPool()
 
 	tx, err := db.Begin()
@@ -511,7 +523,7 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 		fmt.Printf("error=%s\n", err)
 		return err
 	}
-	// how to set 'updated_at' date here?
+	// updated_at - should probably be timezone aware ...
 	sql2 := `INSERT INTO resources (uri, type, hash, data, data_b)
 	  SELECT uri, type, hash, data, data_b 
 	  FROM resource_data_tmp
@@ -519,7 +531,7 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 	  data_b = EXCLUDED.data_b, hash = EXCLUDED.hash, 
 	  updated_at = NOW()
 	`
-
+	// TODO: how to capture excluded here - e.g. updates vs. inserts
 	_, err = tx.Exec(sql2)
 
 	if err != nil {
@@ -534,4 +546,3 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 	}
 	return nil
 }
-

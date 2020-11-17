@@ -47,16 +47,10 @@ func setup() {
 		fmt.Println("resources table not found")
 		sj.MakeResourceSchema()
 	}
-
-	// empty everything out for tests
-	//sj.ClearAllStaging()
-	//sj.ClearAllResources()
 }
 
 func shutdown() {
-	//db := sj.GetConnection()
 	db := sj.GetPool()
-
 	db.Close()
 }
 func TestMain(m *testing.M) {
