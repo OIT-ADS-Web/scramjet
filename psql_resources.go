@@ -546,3 +546,81 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 	}
 	return nil
 }
+
+//https://stackoverflow.com/questions/35179656/slice-chunking-in-go
+func chunkedResources(resources []UriAddressable, chunkSize int) [][]UriAddressable {
+	var divided [][]UriAddressable
+
+	for i := 0; i < len(resources); i += chunkSize {
+		end := i + chunkSize
+
+		if end > len(resources) {
+			end = len(resources)
+		}
+
+		divided = append(divided, resources[i:end])
+	}
+	return divided
+}
+
+func BatchDeleteFromResources(resources []UriAddressable) {
+	chunked := chunkedResources(resources, 500)
+	for _, chunk := range chunked {
+		batchDeleteFromResources(chunk)
+	}
+}
+
+func batchDeleteFromResources(resources []UriAddressable) (err error) {
+	// NOTE: this would need to only do 500-750 (or so) at a time
+	// because of SQL IN clause limit of 1000
+	db := GetPool()
+
+	// TODO: better ways to do this
+	var uris = make([]string, 0)
+
+	for _, resource := range resources {
+		s := fmt.Sprintf("'%s'", resource.Uri())
+		uris = append(uris, s)
+	}
+
+	inClause := strings.Join(uris, ", ")
+
+	sql := fmt.Sprintf(`DELETE from resources WHERE uri IN (
+		  %s
+		)`, inClause)
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(sql)
+
+	if err != nil {
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// just a stub - so I can match staging to resource table
+type UriOnly struct {
+	Fn  UriFunc
+	Res StagingResource
+}
+
+func (uri UriOnly) Uri() string {
+	return uri.Fn(uri.Res)
+}
+
+func BulkRemoveDeletedResources(typeName string, uriMaker UriFunc) {
+	deletes := RetrieveDeletedStaging(typeName)
+	toRemove := []UriAddressable{}
+	for _, res := range deletes {
+		stub := UriOnly{Res: res, Fn: uriMaker}
+		toRemove = append(toRemove, stub)
+	}
+	BatchDeleteFromResources(toRemove)
+}

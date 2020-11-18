@@ -249,7 +249,7 @@ func RetrieveSingleStaging(id string, typeName string) StagingResource {
 }
 
 func BatchMarkInvalidInStaging(resources []StagingResource) {
-	chunked := chunked(resources, 500)
+	chunked := chunkedStaging(resources, 500)
 	for _, chunk := range chunked {
 		batchMarkInvalidInStaging(chunk)
 	}
@@ -330,7 +330,7 @@ func MarkInvalidInStaging(res StagingResource) (err error) {
 }
 
 //https://stackoverflow.com/questions/35179656/slice-chunking-in-go
-func chunked(resources []StagingResource, chunkSize int) [][]StagingResource {
+func chunkedStaging(resources []StagingResource, chunkSize int) [][]StagingResource {
 	var divided [][]StagingResource
 
 	for i := 0; i < len(resources); i += chunkSize {
@@ -346,7 +346,7 @@ func chunked(resources []StagingResource, chunkSize int) [][]StagingResource {
 }
 
 func BatchMarkValidInStaging(resources []StagingResource) {
-	chunked := chunked(resources, 500)
+	chunked := chunkedStaging(resources, 500)
 	for _, chunk := range chunked {
 		batchMarkValidInStaging(chunk)
 	}
@@ -522,6 +522,7 @@ func ClearAllStaging() (err error) {
 	return nil
 }
 
+// call where valid = true? (after transfering to resources)
 func ClearStagingType(typeName string) (err error) {
 	db := GetPool()
 
@@ -844,3 +845,142 @@ func BulkAddStagingResources(typeName string, resources ...StagingResource) erro
 	}
 	return nil
 }
+
+func BatchMarkDeleteInStaging(resources []StagingResource) {
+	chunked := chunkedStaging(resources, 500)
+	for _, chunk := range chunked {
+		batchMarkDeleteInStaging(chunk)
+	}
+}
+
+func batchMarkDeleteInStaging(resources []StagingResource) (err error) {
+	// NOTE: this would need to only do 500-750 (or so) at a time
+	// because of SQL IN clause limit of 1000
+	db := GetPool()
+
+	// TODO: better ways to do this
+	var clauses = make([]string, 0)
+
+	for _, resource := range resources {
+		s := fmt.Sprintf("('%s', '%s')", resource.Id, resource.Type)
+		clauses = append(clauses, s)
+	}
+
+	inClause := strings.Join(clauses, ", ")
+
+	sql := fmt.Sprintf(`UPDATE staging set to_delete = TRUE WHERE (id, type) IN (
+		  %s
+		)`, inClause)
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(sql)
+
+	if err != nil {
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func RetrieveDeletedStaging(typeName string) []StagingResource {
+	db := GetPool()
+
+	resources := []StagingResource{}
+
+	// NOTE: this does *not* filter by is_valid so we can try
+	// again with previously fails
+	sql := `SELECT id, type, data 
+	FROM staging 
+	WHERE type = $1
+	AND to_delete = TRUE
+	`
+	rows, err := db.Query(sql, typeName)
+
+	for rows.Next() {
+		var id string
+		var typeName string
+		var data []byte
+
+		err = rows.Scan(&id, &typeName, &data)
+		res := StagingResource{Id: id, Type: typeName, Data: data}
+		resources = append(resources, res)
+
+		if err != nil {
+			// is this the correct thing to do?
+			continue
+		}
+	}
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return resources
+}
+
+// BulkMarkToDelete(ids... string) { }
+/*
+func BulkMarkStagingToDelete(typeName string, resources ...StagingResource) error {
+	db := GetPool()
+
+	tx, err := db.Begin()
+	if err != nil {
+		log.Printf("error starting transaction =%v\n", err)
+	}
+
+	// supposedly no-op if everything okay
+	defer tx.Rollback()
+
+	// NOTE: don't commit yet (see ON COMMIT DROP)
+	tmpSql := `CREATE TEMPORARY TABLE resources_to_delete_tmp
+	(id text NOT NULL)
+	ON COMMIT DROP
+    `
+	_, err = tx.Exec(tmpSql)
+
+	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "creating temporary table")
+	}
+
+	inputRows := [][]interface{}{}
+	for _, res := range resources {
+		inputRows = append(inputRows, []interface{}{res.Id})
+	}
+
+	_, err = tx.CopyFrom(pgx.Identifier{"resources_to_delete_tmp"},
+		[]string{"uri"},
+		pgx.CopyFromRows(inputRows))
+
+	if err != nil {
+		fmt.Printf("error=%s\n", err)
+		return err
+	}
+
+	// worry about limit of in clause?  could do count, limit etc...
+	// or just depend on caller to chunk?
+	sql := `UPDATE staging set to_delete = 1 WHERE id in
+	(select id from staging_to_delete_tmp)`
+	// TODO: how to capture excluded here - e.g. updates vs. inserts
+	_, err = tx.Exec(sql)
+
+	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "deleting records")
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "commit transaction")
+	}
+	return nil
+}
+*/
+
+// StagingToDeleteList() []string { }  ? ids
