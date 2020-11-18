@@ -34,7 +34,7 @@ type Resource struct {
 
 // TODO: could just send in date - leave it up to library user
 // to determine how it's figured out
-func RetrieveTypeResources(typeName string) ([]Resource, error) {
+func RetrieveTypeResources(typeName string) (error, []Resource) {
 	db := GetPool()
 	resources := []Resource{}
 
@@ -67,9 +67,9 @@ func RetrieveTypeResources(typeName string) ([]Resource, error) {
 	}
 
 	if err != nil {
-		return nil, err
+		return err, nil
 	}
-	return resources, nil
+	return nil, resources
 }
 
 func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error) {
@@ -563,17 +563,34 @@ func chunkedResources(resources []UriAddressable, chunkSize int) [][]UriAddressa
 	return divided
 }
 
-func BatchDeleteFromResources(resources []UriAddressable) {
+func BatchDeleteFromResources(resources []UriAddressable) (err error) {
+	db := GetPool()
 	chunked := chunkedResources(resources, 500)
-	for _, chunk := range chunked {
-		batchDeleteFromResources(chunk)
+	tx, err := db.Begin()
+	if err != nil {
+		return err
 	}
+	// noop if no problems
+	defer tx.Rollback()
+	for _, chunk := range chunked {
+		// how best to deal with chunked errors?
+		// cancel entire transaction?
+		err := batchDeleteFromResources(chunk, tx)
+		if err != nil {
+			return err
+		}
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func batchDeleteFromResources(resources []UriAddressable) (err error) {
+func batchDeleteFromResources(resources []UriAddressable, tx *pgx.Tx) (err error) {
 	// NOTE: this would need to only do 500-750 (or so) at a time
 	// because of SQL IN clause limit of 1000
-	db := GetPool()
+	//db := GetPool()
 
 	// TODO: better ways to do this
 	var uris = make([]string, 0)
@@ -589,19 +606,19 @@ func batchDeleteFromResources(resources []UriAddressable) (err error) {
 		  %s
 		)`, inClause)
 
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
+	//tx, err := db.Begin()
+	//if err != nil {
+	//	return err
+	//}
 	_, err = tx.Exec(sql)
 
 	if err != nil {
 		return err
 	}
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
+	//err = tx.Commit()
+	//if err != nil {
+	//	return err
+	//}
 	return nil
 }
 
@@ -615,12 +632,36 @@ func (uri UriOnly) Uri() string {
 	return uri.Fn(uri.Res)
 }
 
-func BulkRemoveDeletedResources(typeName string, uriMaker UriFunc) {
+func BulkRemoveDeletedResources(typeName string, uriMaker UriFunc) (err error) {
 	deletes := RetrieveDeletedStaging(typeName)
 	toRemove := []UriAddressable{}
 	for _, res := range deletes {
 		stub := UriOnly{Res: res, Fn: uriMaker}
 		toRemove = append(toRemove, stub)
 	}
-	BatchDeleteFromResources(toRemove)
+	err = BatchDeleteFromResources(toRemove)
+	if err != nil {
+		return err
+	}
+	// then remove from staging?
+	// ClearStagingTypeDeletes(typeName)
+	// or let caller ?
+	return nil
+}
+
+func ResourceCount(typeName string) int {
+	var count int
+	// could switch on type or just add pernr filter
+	// to generic query
+	sql := `SELECT count(*) 
+	FROM resources res
+	WHERE type = '%s'`
+	db := GetPool()
+	row := db.QueryRow(sql, count)
+	//db.Get(&count, sql)
+	err := row.Scan(&count)
+	if err != nil {
+		log.Fatalf("error checking count %v", err)
+	}
+	return count
 }

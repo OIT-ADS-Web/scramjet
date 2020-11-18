@@ -65,7 +65,7 @@ func TestResourcesIngest(t *testing.T) {
 	}
 
 	// TODO: need a better way to limit to updates
-	stashed, err := sj.RetrieveTypeResources(typeName)
+	err, stashed := sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error stashing record")
 	}
@@ -118,7 +118,7 @@ func TestBatchResources(t *testing.T) {
 
 	err = sj.BulkAddResources(typeName, resources...)
 	// false = not updates only
-	existing, err := sj.RetrieveTypeResources(typeName)
+	err, existing := sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error stashing record")
 	}
@@ -170,7 +170,7 @@ func TestBatchDeleteResources(t *testing.T) {
 
 	err = sj.BulkAddResources(typeName, resources...)
 	// make sure they made it to begin with
-	existing, err := sj.RetrieveTypeResources(typeName)
+	err, existing := sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error stashing record")
 	}
@@ -184,9 +184,12 @@ func TestBatchDeleteResources(t *testing.T) {
 	uriMaker := func(res sj.StagingResource) string {
 		return fmt.Sprintf("https://scholars.duke.edu/individual/%s", res.Id)
 	}
-	sj.BulkRemoveDeletedResources(typeName, uriMaker)
-
-	existing, err = sj.RetrieveTypeResources(typeName)
+	err = sj.BulkRemoveDeletedResources(typeName, uriMaker)
+	if err != nil {
+		fmt.Println("could not mark for delete")
+		t.Errorf("err=%v\n", err)
+	}
+	err, existing = sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error retrieving record")
 	}

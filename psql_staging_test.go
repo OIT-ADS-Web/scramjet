@@ -268,7 +268,11 @@ func TestBatchMarkDelete(t *testing.T) {
 	// should be no rejects
 
 	// NOTE: just immediately marking for delete
-	sj.BatchMarkDeleteInStaging(valid)
+	err = sj.BatchMarkDeleteInStaging(valid)
+	if err != nil {
+		fmt.Println("could not mark for delete")
+		t.Errorf("err=%v\n", err)
+	}
 	list := sj.RetrieveDeletedStaging(typeName)
 	if len(list) != 2 {
 		t.Error("did not retrieve 2 and only 2 record (for delete)")
