@@ -2,13 +2,15 @@ package staging_importer
 
 import (
 	//"context"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
 
-	"github.com/jackc/pgx"
+	//"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
 )
 
@@ -24,7 +26,7 @@ type StagingResource struct {
 // Staging ...
 func RetrieveTypeStaging(typeName string) []StagingResource {
 	db := GetPool()
-
+	ctx := context.Background()
 	resources := []StagingResource{}
 
 	// NOTE: this does *not* filter by is_valid so we can try
@@ -33,7 +35,7 @@ func RetrieveTypeStaging(typeName string) []StagingResource {
 	FROM staging 
 	WHERE type = $1
 	`
-	rows, err := db.Query(sql, typeName)
+	rows, err := db.Query(ctx, sql, typeName)
 
 	for rows.Next() {
 		var id string
@@ -58,7 +60,7 @@ func RetrieveTypeStaging(typeName string) []StagingResource {
 
 func RetrieveValidStaging(typeName string) []StagingResource {
 	db := GetPool()
-
+	ctx := context.Background()
 	resources := []StagingResource{}
 
 	// NOTE: this does *not* filter by is_valid so we can try
@@ -68,7 +70,7 @@ func RetrieveValidStaging(typeName string) []StagingResource {
 	WHERE type = $1
 	AND is_valid = TRUE
 	`
-	rows, err := db.Query(sql, typeName)
+	rows, err := db.Query(ctx, sql, typeName)
 
 	for rows.Next() {
 		var id string
@@ -93,7 +95,7 @@ func RetrieveValidStaging(typeName string) []StagingResource {
 
 func RetrieveInvalidStaging(typeName string) []StagingResource {
 	db := GetPool()
-
+	ctx := context.Background()
 	resources := []StagingResource{}
 
 	// NOTE: this does *not* filter by is_valid so we can try
@@ -103,7 +105,7 @@ func RetrieveInvalidStaging(typeName string) []StagingResource {
 	WHERE type = $1
 	AND is_valid = FALSE
 	`
-	rows, err := db.Query(sql, typeName)
+	rows, err := db.Query(ctx, sql, typeName)
 
 	for rows.Next() {
 		var id string
@@ -128,7 +130,7 @@ func RetrieveInvalidStaging(typeName string) []StagingResource {
 
 func ListTypeStaging(typeName string, validator ValidatorFunc) {
 	db := GetPool()
-
+	ctx := context.Background()
 	resources := []StagingResource{}
 
 	// find ones not already marked invalid ?
@@ -137,7 +139,7 @@ func ListTypeStaging(typeName string, validator ValidatorFunc) {
 	WHERE type = $1
 	AND is_valid != FALSE
 	`
-	rows, err := db.Query(sql, typeName)
+	rows, err := db.Query(ctx, sql, typeName)
 
 	for rows.Next() {
 		var id string
@@ -165,7 +167,7 @@ func ListTypeStaging(typeName string, validator ValidatorFunc) {
 
 func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]StagingResource, []StagingResource) {
 	db := GetPool()
-
+	ctx := context.Background()
 	resources := []StagingResource{}
 
 	var results = make([]StagingResource, 0)
@@ -178,7 +180,7 @@ func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]StagingResou
 	AND is_valid is not null
 	`
 
-	rows, err := db.Query(sql, typeName)
+	rows, err := db.Query(ctx, sql, typeName)
 
 	// NOTE: sqlx reads straight into array of structs
 	// is kind of easier
@@ -230,7 +232,7 @@ func ProcessTypeStaging(typeName string, validator ValidatorFunc) {
 
 func RetrieveSingleStaging(id string, typeName string) StagingResource {
 	db := GetPool()
-
+	ctx := context.Background()
 	var found StagingResource
 
 	// NOTE: this does *not* filter by is_valid - because it's
@@ -239,7 +241,7 @@ func RetrieveSingleStaging(id string, typeName string) StagingResource {
 	  FROM staging
 	  WHERE (id = $1 AND type = $2)`
 
-	row := db.QueryRow(findSQL, id, typeName)
+	row := db.QueryRow(ctx, findSQL, id, typeName)
 	err := row.Scan(&found)
 
 	if err != nil {
@@ -249,7 +251,7 @@ func RetrieveSingleStaging(id string, typeName string) StagingResource {
 }
 
 func BatchMarkInvalidInStaging(resources []StagingResource) {
-	chunked := chunked(resources, 500)
+	chunked := chunkedStaging(resources, 500)
 	for _, chunk := range chunked {
 		batchMarkInvalidInStaging(chunk)
 	}
@@ -260,6 +262,7 @@ func batchMarkInvalidInStaging(resources []StagingResource) (err error) {
 	// NOTE: this would need to only do 500 at a time
 	// because of SQL IN clause limit
 	db := GetPool()
+	ctx := context.Background()
 
 	// TODO: better ways to do this
 	var clauses = make([]string, 0)
@@ -275,7 +278,7 @@ func batchMarkInvalidInStaging(resources []StagingResource) (err error) {
 		  %s
 		)`, inClause)
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 
 	if err != nil {
 		//log.Printf(">error beginning transaction:%v", err)
@@ -283,7 +286,7 @@ func batchMarkInvalidInStaging(resources []StagingResource) (err error) {
 		//os.Exit(1)
 		return err
 	}
-	_, err = tx.Exec(sql)
+	_, err = tx.Exec(ctx, sql)
 
 	if err != nil {
 		//log.Printf(">ERROR(UPDATE):%v", err)
@@ -291,7 +294,7 @@ func batchMarkInvalidInStaging(resources []StagingResource) (err error) {
 		//os.Exit(1)
 		return err
 	}
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		//log.Printf(">ERROR(UPDATE) - commit:%v", err)
 		// TODO: shouldn't exit in library
@@ -305,8 +308,8 @@ func batchMarkInvalidInStaging(resources []StagingResource) (err error) {
 // mark valid, invalid in groups of 500 or something
 func MarkInvalidInStaging(res StagingResource) (err error) {
 	db := GetPool()
-
-	tx, err := db.Begin()
+	ctx := context.Background()
+	tx, err := db.Begin(ctx)
 
 	if err != nil {
 		//log.Printf(">error beginning transaction:%v", err)
@@ -319,7 +322,7 @@ func MarkInvalidInStaging(res StagingResource) (err error) {
 	  set is_valid = FALSE
 		WHERE id = $1 and type = $2`
 
-	_, err = tx.Exec(sql, res.Id, res.Type)
+	_, err = tx.Exec(ctx, sql, res.Id, res.Type)
 	if err != nil {
 		return err
 	}
@@ -330,7 +333,7 @@ func MarkInvalidInStaging(res StagingResource) (err error) {
 }
 
 //https://stackoverflow.com/questions/35179656/slice-chunking-in-go
-func chunked(resources []StagingResource, chunkSize int) [][]StagingResource {
+func chunkedStaging(resources []StagingResource, chunkSize int) [][]StagingResource {
 	var divided [][]StagingResource
 
 	for i := 0; i < len(resources); i += chunkSize {
@@ -346,7 +349,7 @@ func chunked(resources []StagingResource, chunkSize int) [][]StagingResource {
 }
 
 func BatchMarkValidInStaging(resources []StagingResource) {
-	chunked := chunked(resources, 500)
+	chunked := chunkedStaging(resources, 500)
 	for _, chunk := range chunked {
 		batchMarkValidInStaging(chunk)
 	}
@@ -357,7 +360,7 @@ func batchMarkValidInStaging(resources []StagingResource) (err error) {
 	// NOTE: this would need to only do 500-750 (or so) at a time
 	// because of SQL IN clause limit of 1000
 	db := GetPool()
-
+	ctx := context.Background()
 	// TODO: better ways to do this
 	var clauses = make([]string, 0)
 
@@ -372,16 +375,16 @@ func batchMarkValidInStaging(resources []StagingResource) (err error) {
 		  %s
 		)`, inClause)
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(sql)
+	_, err = tx.Exec(ctx, sql)
 
 	if err != nil {
 		return err
 	}
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
@@ -390,8 +393,8 @@ func batchMarkValidInStaging(resources []StagingResource) (err error) {
 
 func MarkValidInStaging(res StagingResource) (err error) {
 	db := GetPool()
-
-	tx, err := db.Begin()
+	ctx := context.Background()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -399,12 +402,12 @@ func MarkValidInStaging(res StagingResource) (err error) {
 	sql := `UPDATE staging
 	  set is_valid = TRUE 
 		WHERE id = $1 and type = $2`
-	_, err = tx.Exec(sql, res.Id, res.Type)
+	_, err = tx.Exec(ctx, sql, res.Id, res.Type)
 
 	if err != nil {
 		return err
 	}
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
@@ -413,20 +416,20 @@ func MarkValidInStaging(res StagingResource) (err error) {
 
 func DeleteFromStaging(res StagingResource) (err error) {
 	db := GetPool()
-
+	ctx := context.Background()
 	sql := `DELETE from staging WHERE id = $1 AND type = $2`
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(sql, res.Id, res.Type)
+	_, err = tx.Exec(ctx, sql, res.Id, res.Type)
 
 	if err != nil {
 		return err
 	}
 
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
@@ -437,7 +440,7 @@ func DeleteFromStaging(res StagingResource) (err error) {
 func StagingTableExists() bool {
 	var exists bool
 	db := GetPool()
-
+	ctx := context.Background()
 	catalog := GetDbName()
 	// FIXME: not sure this is right
 	sqlExists := `SELECT EXISTS (
@@ -446,7 +449,7 @@ func StagingTableExists() bool {
         WHERE  table_catalog = $1
         AND    table_name = 'staging'
     )`
-	row := db.QueryRow(sqlExists, catalog)
+	row := db.QueryRow(ctx, sqlExists, catalog)
 	err := row.Scan(&exists)
 	if err != nil {
 		log.Fatalf("error checking if row exists %v", err)
@@ -467,18 +470,19 @@ func MakeStagingSchema() {
     )`
 
 	db := GetPool()
-	tx, err := db.Begin()
+	ctx := context.Background()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		log.Fatalf(">error beginning transaction:%v", err)
 	}
 	// NOTE: supposedly this is no-op if no error
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
-	_, err = tx.Exec(sql)
+	_, err = tx.Exec(ctx, sql)
 	if err != nil {
 		log.Fatalf("ERROR(CREATE):%v", err)
 	}
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		log.Fatalf(">error commiting transaction:%v", err)
 	}
@@ -487,16 +491,17 @@ func MakeStagingSchema() {
 
 func DropStaging() error {
 	db := GetPool()
+	ctx := context.Background()
 	sql := `DROP table IF EXISTS staging`
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(sql)
+	_, err = tx.Exec(ctx, sql)
 	if err != nil {
 		return err
 	}
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
@@ -505,17 +510,17 @@ func DropStaging() error {
 
 func ClearAllStaging() (err error) {
 	db := GetPool()
-
+	ctx := context.Background()
 	sql := `DELETE from staging`
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(sql)
+	_, err = tx.Exec(ctx, sql)
 	if err != nil {
 		return err
 	}
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
@@ -524,21 +529,44 @@ func ClearAllStaging() (err error) {
 
 func ClearStagingType(typeName string) (err error) {
 	db := GetPool()
-
+	ctx := context.Background()
 	sql := `DELETE from staging`
 
 	sql += fmt.Sprintf(" WHERE type='%s'", typeName)
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(sql)
+	_, err = tx.Exec(ctx, sql)
 	if err != nil {
 		return err
 	}
 
-	err = tx.Commit()
+	err = tx.Commit(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ClearStagingTypeDeletes(typeName string) (err error) {
+	db := GetPool()
+	ctx := context.Background()
+	sql := `DELETE from staging`
+
+	sql += fmt.Sprintf(" WHERE type='%s' AND to_delete = TRUE", typeName)
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, sql)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
@@ -548,7 +576,7 @@ func ClearStagingType(typeName string) (err error) {
 // only add (presumed existence already checked)
 func AddStagingResource(obj interface{}, id string, typeName string) (err error) {
 	db := GetPool()
-
+	ctx := context.Background()
 	str, err := json.Marshal(obj)
 	if err != nil {
 		return err
@@ -556,18 +584,18 @@ func AddStagingResource(obj interface{}, id string, typeName string) (err error)
 
 	res := &StagingResource{Id: id, Type: typeName, Data: str}
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	sql := `INSERT INTO STAGING (id, type, data) 
 	      VALUES ($1, $2, $3)`
-	_, err = tx.Exec(sql, res.Id, res.Type, res.Data)
+	_, err = tx.Exec(ctx, sql, res.Id, res.Type, res.Data)
 
 	if err != nil {
 		return err
 	}
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
@@ -576,7 +604,7 @@ func AddStagingResource(obj interface{}, id string, typeName string) (err error)
 
 func SaveStagingResource(obj Identifiable, typeName string) (err error) {
 	db := GetPool()
-
+	ctx := context.Background()
 	str, err := json.Marshal(obj)
 	if err != nil {
 		return err
@@ -588,25 +616,25 @@ func SaveStagingResource(obj Identifiable, typeName string) (err error) {
 	findSql := `SELECT id FROM staging
 	  WHERE (id = $1 AND type = $2)`
 
-	row := db.QueryRow(findSql, obj.Identifier(), typeName)
+	row := db.QueryRow(ctx, findSql, obj.Identifier(), typeName)
 
 	// NOTE: can't scan into structs
 	var foundId string
 	notFoundError := row.Scan(&foundId)
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 
 	// supposedly no-op if no problems
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	// e.g. if not found???
 	if notFoundError != nil {
 		sql := `INSERT INTO staging (id, type, data) 
 	      VALUES ($1, $2, $3)`
-		_, err := tx.Exec(sql, res.Id, res.Type, res.Data)
+		_, err := tx.Exec(ctx, sql, res.Id, res.Type, res.Data)
 
 		if err != nil {
 			return err
@@ -618,24 +646,23 @@ func SaveStagingResource(obj Identifiable, typeName string) (err error) {
 		data = $3,
 		is_valid = null
 		WHERE id = $1 and type = $2`
-		_, err = tx.Exec(sql, res.Id, res.Type, res.Data)
+		_, err = tx.Exec(ctx, sql, res.Id, res.Type, res.Data)
 
 		if err != nil {
 			return err
 		}
 	}
 
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-
 func SaveStagingResourceDirect(res StagingResource, typeName string) (err error) {
 	db := GetPool()
-
+	ctx := context.Background()
 	//str, err := json.Marshal(obj)
 	//if err != nil {
 	//	return err
@@ -647,25 +674,25 @@ func SaveStagingResourceDirect(res StagingResource, typeName string) (err error)
 	findSql := `SELECT id FROM staging
 	  WHERE (id = $1 AND type = $2)`
 
-	row := db.QueryRow(findSql, res.Id, typeName)
+	row := db.QueryRow(ctx, findSql, res.Id, typeName)
 
 	// NOTE: can't scan into structs
 	var foundId string
 	notFoundError := row.Scan(&foundId)
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 
 	// supposedly no-op if no problems
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	// e.g. if not found???
 	if notFoundError != nil {
 		sql := `INSERT INTO staging (id, type, data) 
 	      VALUES ($1, $2, $3)`
-		_, err := tx.Exec(sql, res.Id, res.Type, res.Data)
+		_, err := tx.Exec(ctx, sql, res.Id, res.Type, res.Data)
 
 		if err != nil {
 			return err
@@ -677,28 +704,28 @@ func SaveStagingResourceDirect(res StagingResource, typeName string) (err error)
 		data = $3,
 		is_valid = null
 		WHERE id = $1 and type = $2`
-		_, err = tx.Exec(sql, res.Id, res.Type, res.Data)
+		_, err = tx.Exec(ctx, sql, res.Id, res.Type, res.Data)
 
 		if err != nil {
 			return err
 		}
 	}
 
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-
 // returns false if error - maybe should not
 func StagingResourceExists(uri string, typeName string) bool {
 	var exists bool
 	db := GetPool()
+	ctx := context.Background()
 
 	sqlExists := `SELECT EXISTS (SELECT id FROM staging where (id = $1 AND type =$2))`
-	err := db.QueryRow(sqlExists, uri, typeName).Scan(&exists)
+	err := db.QueryRow(ctx, sqlExists, uri, typeName).Scan(&exists)
 	if err != nil {
 		return false
 	}
@@ -743,6 +770,7 @@ func removeNulls(idSlice []Identifiable) []Identifiable {
 func BulkAddStaging(typeName string, items ...Identifiable) error {
 	var resources = make([]StagingResource, 0)
 	var err error
+	ctx := context.Background()
 	// NOTE: not sure if these are necessary
 	list := unique(items)
 
@@ -758,19 +786,19 @@ func BulkAddStaging(typeName string, items ...Identifiable) error {
 
 	db := GetPool()
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		fmt.Printf("error starting transaction =%v\n", err)
 	}
 
 	// supposedly no-op if everything okay
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	tmpSql := `CREATE TEMPORARY TABLE staging_data_tmp
 	  (id text NOT NULL, type text NOT NULL, data json NOT NULL)
 	  ON COMMIT DROP
 	`
-	_, err = tx.Exec(tmpSql)
+	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
 		return errors.Wrap(err, "creating temporary table")
@@ -783,7 +811,7 @@ func BulkAddStaging(typeName string, items ...Identifiable) error {
 		inputRows = append(inputRows, []interface{}{res.Id, res.Type, res.Data})
 	}
 
-	_, err = tx.CopyFrom(pgx.Identifier{"staging_data_tmp"},
+	_, err = tx.CopyFrom(ctx, pgx.Identifier{"staging_data_tmp"},
 		[]string{"id", "type", "data"},
 		pgx.CopyFromRows(inputRows))
 
@@ -795,13 +823,13 @@ func BulkAddStaging(typeName string, items ...Identifiable) error {
 	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data
 	`
 
-	_, err = tx.Exec(sql2)
+	_, err = tx.Exec(ctx, sql2)
 
 	if err != nil {
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return errors.Wrap(err, "commit transaction")
 	}
@@ -810,20 +838,21 @@ func BulkAddStaging(typeName string, items ...Identifiable) error {
 
 func BulkAddStagingResources(typeName string, resources ...StagingResource) error {
 	db := GetPool()
+	ctx := context.Background()
+	tx, err := db.Begin(ctx)
 
-	tx, err := db.Begin()
 	if err != nil {
 		fmt.Printf("error starting transaction =%v\n", err)
 	}
 
 	// supposedly no-op if everything okay
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	tmpSql := `CREATE TEMPORARY TABLE staging_data_tmp
 	  (id text NOT NULL, type text NOT NULL, data json NOT NULL)
 	  ON COMMIT DROP
 	`
-	_, err = tx.Exec(tmpSql)
+	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
 		return errors.Wrap(err, "creating temporary table")
@@ -836,7 +865,7 @@ func BulkAddStagingResources(typeName string, resources ...StagingResource) erro
 		inputRows = append(inputRows, []interface{}{res.Id, res.Type, res.Data})
 	}
 
-	_, err = tx.CopyFrom(pgx.Identifier{"staging_data_tmp"},
+	_, err = tx.CopyFrom(ctx, pgx.Identifier{"staging_data_tmp"},
 		[]string{"id", "type", "data"},
 		pgx.CopyFromRows(inputRows))
 
@@ -848,13 +877,178 @@ func BulkAddStagingResources(typeName string, resources ...StagingResource) erro
 	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data
 	`
 
-	_, err = tx.Exec(sql2)
+	_, err = tx.Exec(ctx, sql2)
 
 	if err != nil {
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
-	err = tx.Commit()
+	err = tx.Commit(ctx)
+	if err != nil {
+		return errors.Wrap(err, "commit transaction")
+	}
+	return nil
+}
+
+func BatchMarkDeleteInStaging(resources []StagingResource) (err error) {
+	db := GetPool()
+	ctx := context.Background()
+
+	chunked := chunkedStaging(resources, 500)
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	// noop if no problems
+	defer tx.Rollback(ctx)
+	for _, chunk := range chunked {
+		// how to deal with chunked error?
+		err := batchMarkDeleteInStaging(chunk, tx)
+		if err != nil {
+			return err
+		}
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func batchMarkDeleteInStaging(resources []StagingResource, tx pgx.Tx) (err error) {
+	// NOTE: this would need to only do 500-750 (or so) at a time
+	// because of SQL IN clause limit of 1000
+	//db := GetPool()
+	ctx := context.Background()
+	// TODO: better ways to do this
+	var clauses = make([]string, 0)
+
+	for _, resource := range resources {
+		s := fmt.Sprintf("('%s', '%s')", resource.Id, resource.Type)
+		clauses = append(clauses, s)
+	}
+
+	inClause := strings.Join(clauses, ", ")
+
+	sql := fmt.Sprintf(`UPDATE staging set to_delete = TRUE WHERE (id, type) IN (
+		  %s
+		)`, inClause)
+
+	//tx, err := db.Begin()
+	//if err != nil {
+	//	return err
+	//}
+	_, err = tx.Exec(ctx, sql)
+
+	if err != nil {
+		return err
+	}
+	//err = tx.Commit()
+	//if err != nil {
+	//	return err
+	//}
+	return nil
+}
+
+func RetrieveDeletedStaging(typeName string) []StagingResource {
+	db := GetPool()
+	ctx := context.Background()
+	resources := []StagingResource{}
+
+	sql := `SELECT id, type, data 
+	FROM staging 
+	WHERE type = $1
+	AND to_delete = TRUE
+	`
+	rows, err := db.Query(ctx, sql, typeName)
+
+	for rows.Next() {
+		var id string
+		var typeName string
+		var data []byte
+
+		err = rows.Scan(&id, &typeName, &data)
+		res := StagingResource{Id: id, Type: typeName, Data: data}
+		resources = append(resources, res)
+
+		if err != nil {
+			// is this the correct thing to do?
+			continue
+		}
+	}
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return resources
+}
+
+func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
+	var resources = make([]StagingResource, 0)
+	var err error
+	ctx := context.Background()
+	// NOTE: not sure if these are necessary
+	list := unique(items)
+
+	for _, item := range list {
+		//str, err := json.Marshal(item)
+		//if err != nil {
+		// return? or let continue loop
+		//	continue
+		//}
+		// NOTE: empty string for data
+		res := &StagingResource{Id: item.Identifier(), Type: typeName, Data: []byte("")}
+		resources = append(resources, *res)
+	}
+
+	db := GetPool()
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		fmt.Printf("error starting transaction =%v\n", err)
+	}
+
+	// supposedly no-op if everything okay
+	defer tx.Rollback(ctx)
+
+	tmpSql := `CREATE TEMPORARY TABLE staging_data_deletes_tmp
+	  (id text NOT NULL, type text NOT NULL, data json NOT NULL, to_delete boolean DEFAULT TRUE)
+	  ON COMMIT DROP
+	`
+	_, err = tx.Exec(ctx, tmpSql)
+
+	if err != nil {
+		return errors.Wrap(err, "creating temporary table")
+	}
+
+	// NOTE: don't commit yet (see ON COMMIT DROP)
+	inputRows := [][]interface{}{}
+	for _, res := range resources {
+		inputRows = append(inputRows, []interface{}{res.Id, res.Type, res.Data})
+	}
+
+	_, err = tx.CopyFrom(ctx, pgx.Identifier{"staging_data_deletes_tmp"},
+		[]string{"id", "type", "data", "to_delete"},
+		pgx.CopyFromRows(inputRows))
+
+	if err != nil {
+		return err
+	}
+	// NOTE: if it exists, just nulling out the data
+	sql2 := `INSERT INTO staging (id, type, data, to_delete)
+	  SELECT id, type, data, to_delete FROM staging_data_deletes_tmp
+	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data, 
+	  to_delete = EXCLUDED.to_delete
+	`
+
+	_, err = tx.Exec(ctx, sql2)
+
+	if err != nil {
+		return errors.Wrap(err, "move from temporary to real table")
+	}
+
+	err = tx.Commit(ctx)
 	if err != nil {
 		return errors.Wrap(err, "commit transaction")
 	}

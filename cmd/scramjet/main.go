@@ -370,5 +370,5 @@ func main() {
 	log.Println("shutting down")
 	os.Exit(0)
 
-	defer sj.Pool.Close()
+	defer sj.DBPool.Close()
 }
