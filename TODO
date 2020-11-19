@@ -1,2 +1,109 @@
 1. better environment variable names
 2. integrate a type mapper e.g. type "Person" = struct Person etc...
+
+
+** INTAKE
+
+<passenger>
+/api/intake/[type]
+{'type': 'Person': id: [an id]: payload: [json] }
+
+** TRANSFER
+
+<wave> (triggered)
+/api/transfer/[type]
+{'id': callback -->? validate --> }
+
+** LAUNCH
+
+<nozzle> (pull?)
+/api/launch/[type]/(all|changes)
+{'id' -> changes -- converter -- >}
+
+[validators -> [type]: -> [validator]]
+
+Names:
+Intake <-
+
+TakeOff
+Trajectory
+Traject
+SendOff
+
+Transfer
+
+FlightSchedule
+Path ->
+Destination
+
+Passenger
+Wave
+Rider
+Kinetic
+Turbo
+Nozzle
+Engine
+Launch
+Propulsion
+
+Intake
+Launch
+
+
+
+
+"marching cubes"
+
+https://redcap.duke.edu/redcap/surveys/?sq=ehSTBatWEZ
+
+
+CREATE TABLE resources_audit (
+    operation char(1) NOT NULL,
+    stamp timestamp NOT NULL,
+    uri text NOT NULL,
+    type text NOT NULL,
+    hash text NOT NULL,
+    data json NOT NULL,
+    data_b jsonb NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+)
+
+CREATE OR REPLACE FUNCTION process_res_update_audit() RETURNS TRIGGER AS $res_update_audit$
+    BEGIN
+       INSERT INTO resources_audit
+       SELECT 'U', now(), n.* FROM new_table n;
+       RETURN NULL; -- result is ignored since this is an AFTER trigger
+    END;
+$res_update_audit$ LANGUAGE plpgsql;
+    
+CREATE OR REPLACE FUNCTION process_res_delete_audit() RETURNS TRIGGER AS $res_delete_audit$
+    BEGIN
+      INSERT INTO resources_audit
+      SELECT 'D', now(), o.* FROM old_table o;     
+      RETURN NULL; -- result is ignored since this is an AFTER trigger
+    END;
+$res_delete_audit$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION process_res_insert_audit() RETURNS TRIGGER AS $res_insert_audit$
+    BEGIN
+      INSERT INTO resources_audit
+      SELECT 'I', now(), n.* FROM new_table n;  
+      RETURN NULL; -- result is ignored since this is an AFTER trigger
+    END;
+$res_insert_audit$ LANGUAGE plpgsql;
+    
+    
+CREATE TRIGGER resource_audit_ins
+    AFTER INSERT ON resources
+    REFERENCING NEW TABLE AS new_table
+    FOR EACH STATEMENT EXECUTE FUNCTION process_res_insert_audit();
+CREATE TRIGGER resource_audit_upd
+    AFTER UPDATE ON resources
+    REFERENCING OLD TABLE AS old_table NEW TABLE AS new_table
+    FOR EACH STATEMENT EXECUTE FUNCTION process_res_update_audit();
+CREATE TRIGGER resource_audit_del
+    AFTER DELETE ON resources
+    REFERENCING OLD TABLE AS old_table
+    FOR EACH STATEMENT EXECUTE FUNCTION process_res_delete_audit();
+
