@@ -54,5 +54,5 @@ func main() {
 		sj.MakeResourceSchema()
 	}
 
-	defer sj.Pool.Close()
+	defer sj.DBPool.Close()
 }

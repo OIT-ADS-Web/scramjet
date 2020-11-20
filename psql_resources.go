@@ -1,6 +1,7 @@
 package staging_importer
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -9,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx"
+	//"github.com/jackc/pgx"
 	"github.com/jackc/pgx/pgtype"
+	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
 )
 
@@ -37,13 +39,13 @@ type Resource struct {
 func RetrieveTypeResources(typeName string) (error, []Resource) {
 	db := GetPool()
 	resources := []Resource{}
-
+	ctx := context.Background()
 	var err error
 	sql := `SELECT uri, type, hash, data, data_b
 		FROM resources 
 		WHERE type =  $1
 		`
-	rows, _ := db.Query(sql, typeName)
+	rows, _ := db.Query(ctx, sql, typeName)
 
 	for rows.Next() {
 		var uri string
@@ -75,14 +77,14 @@ func RetrieveTypeResources(typeName string) (error, []Resource) {
 func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error) {
 	db := GetPool()
 	resources := []Resource{}
-
+	ctx := context.Background()
 	var err error
 	sql := `SELECT uri, type, hash, data, data_b
 		FROM resources 
 		WHERE type =  $1
 		LIMIT $2
 		`
-	rows, _ := db.Query(sql, typeName, limit)
+	rows, _ := db.Query(ctx, sql, typeName, limit)
 
 	for rows.Next() {
 		var uri string
@@ -120,7 +122,9 @@ func makeHash(text string) string {
 
 // FIXME: would like a way to do multiple at a time - some kind of upsert?
 func SaveResource(obj UriAddressable, typeName string) (err error) {
+	ctx := context.Background()
 	str, err := json.Marshal(obj)
+
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -153,17 +157,17 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 	  WHERE (uri = $1 AND type = $2)
 	`
 
-	row := db.QueryRow(findSQL, obj.Uri(), typeName)
+	row := db.QueryRow(ctx, findSQL, obj.Uri(), typeName)
 	notFoundError := row.Scan(&found.Uri, &found.Type)
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 
 	// either insert or update
 	if notFoundError != nil {
 		// TODO: created_at, updated_at
 		sql := `INSERT INTO resources (uri, type, hash, data, data_b) 
 	      VALUES ($1, $2, $3, $4, $5)`
-		_, err := tx.Exec(sql, res.Uri, res.Type, res.Hash, &res.Data, &res.DataB)
+		_, err := tx.Exec(ctx, sql, res.Uri, res.Type, res.Hash, &res.Data, &res.DataB)
 
 		if err != nil {
 			return err
@@ -183,7 +187,7 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 		      data_b = $5,
 		      updated_at = NOW()
 		      WHERE uri = $1 and type = $2`
-			_, err := tx.Exec(sql, res.Uri, res.Type, res.Hash, &res.Data, &res.DataB)
+			_, err := tx.Exec(ctx, sql, res.Uri, res.Type, res.Hash, &res.Data, &res.DataB)
 
 			if err != nil {
 				return err
@@ -191,7 +195,7 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 		}
 	}
 
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	// TODO: return :insert or :update (or nil)
 	return err
 }
@@ -199,6 +203,7 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 // TODO: the 'table_catalog' changes
 func ResourceTableExists() bool {
 	var exists bool
+	ctx := context.Background()
 	db := GetPool()
 
 	catalog := GetDbName()
@@ -209,7 +214,7 @@ func ResourceTableExists() bool {
         WHERE  table_catalog = $1
         AND    table_name = 'resources'
     )`
-	err := db.QueryRow(sqlExists, catalog).Scan(&exists)
+	err := db.QueryRow(ctx, sqlExists, catalog).Scan(&exists)
 	if err != nil {
 		log.Fatalf("error checking if row exists %v", err)
 	}
@@ -233,20 +238,20 @@ func MakeResourceSchema() {
 		PRIMARY KEY(uri, type),
 		CONSTRAINT uniq_uri_hash UNIQUE (uri, type, hash)
     )`
-
+	ctx := context.Background()
 	db := GetPool()
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		log.Fatalf(">error beginning transaction:%v", err)
 	}
-	_, err = tx.Exec(sql)
+	_, err = tx.Exec(ctx, sql)
 
 	if err != nil {
 		log.Fatalf(">error executing sql:%v", err)
 	}
 
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		log.Fatalf("ERROR(CREATE):%v", err)
 	}
@@ -256,16 +261,17 @@ func MakeResourceSchema() {
 
 func DropResources() error {
 	db := GetPool()
+	ctx := context.Background()
 	sql := `DROP table IF EXISTS resources`
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(sql)
+	_, err = tx.Exec(ctx, sql)
 	if err != nil {
 		return err
 	}
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
@@ -274,18 +280,19 @@ func DropResources() error {
 
 func ClearAllResources() (err error) {
 	db := GetPool()
+	ctx := context.Background()
 	sql := `DELETE from resources`
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(sql)
+	_, err = tx.Exec(ctx, sql)
 
 	if err != nil {
 		return err
 	}
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 
 	if err != nil {
 		return err
@@ -296,21 +303,21 @@ func ClearAllResources() (err error) {
 // TODO: should probably return error -  not have os.Exit
 func ClearResourceType(typeName string) (err error) {
 	db := GetPool()
-
+	ctx := context.Background()
 	sql := `DELETE from resources`
 	sql += fmt.Sprintf(" WHERE type='%s'", typeName)
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(sql)
+	_, err = tx.Exec(ctx, sql)
 
 	if err != nil {
 		return err
 	}
 
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
@@ -367,14 +374,14 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	}
 
 	db := GetPool()
-
-	tx, err := db.Begin()
+	ctx := context.Background()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		log.Printf("error starting transaction =%v\n", err)
 	}
 
 	// supposedly no-op if everything okay
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
 	  (uri text NOT NULL, type text NOT NULL, hash text NOT NULL,
@@ -384,7 +391,7 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	  )
 	  ON COMMIT DROP
 	`
-	_, err = tx.Exec(tmpSql)
+	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
 		log.Printf("error=%s\n", err)
@@ -409,7 +416,7 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 			x})
 	}
 
-	_, err = tx.CopyFrom(pgx.Identifier{"resource_data_tmp"},
+	_, err = tx.CopyFrom(ctx, pgx.Identifier{"resource_data_tmp"},
 		[]string{"uri", "type", "hash", "data", "data_b"},
 		pgx.CopyFromRows(inputRows))
 
@@ -425,14 +432,14 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	  updated_at = NOW()
 	`
 
-	_, err = tx.Exec(sql2)
+	_, err = tx.Exec(ctx, sql2)
 
 	if err != nil {
 		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "commit transaction")
@@ -443,6 +450,7 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ...StagingResource) error {
 	var resources = make([]Resource, 0)
 	var err error
+	ctx := context.Background()
 
 	for _, item := range items {
 		str := item.Data
@@ -474,13 +482,13 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 
 	db := GetPool()
 
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		log.Printf("error starting transaction =%v\n", err)
 	}
 
 	// supposedly no-op if everything okay
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
 	  (uri text NOT NULL, type text NOT NULL, hash text NOT NULL,
@@ -490,7 +498,7 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 	  )
 	  ON COMMIT DROP
 	`
-	_, err = tx.Exec(tmpSql)
+	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
 		log.Printf("error=%s\n", err)
@@ -515,7 +523,7 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 			x})
 	}
 
-	_, err = tx.CopyFrom(pgx.Identifier{"resource_data_tmp"},
+	_, err = tx.CopyFrom(ctx, pgx.Identifier{"resource_data_tmp"},
 		[]string{"uri", "type", "hash", "data", "data_b"},
 		pgx.CopyFromRows(inputRows))
 
@@ -532,14 +540,14 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 	  updated_at = NOW()
 	`
 	// TODO: how to capture excluded here - e.g. updates vs. inserts
-	_, err = tx.Exec(sql2)
+	_, err = tx.Exec(ctx, sql2)
 
 	if err != nil {
 		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "commit transaction")
@@ -565,13 +573,14 @@ func chunkedResources(resources []UriAddressable, chunkSize int) [][]UriAddressa
 
 func BatchDeleteFromResources(resources []UriAddressable) (err error) {
 	db := GetPool()
+	ctx := context.Background()
 	chunked := chunkedResources(resources, 500)
-	tx, err := db.Begin()
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	// noop if no problems
-	defer tx.Rollback()
+	defer tx.Rollback(context.Background())
 	for _, chunk := range chunked {
 		// how best to deal with chunked errors?
 		// cancel entire transaction?
@@ -580,18 +589,18 @@ func BatchDeleteFromResources(resources []UriAddressable) (err error) {
 			return err
 		}
 	}
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func batchDeleteFromResources(resources []UriAddressable, tx *pgx.Tx) (err error) {
+func batchDeleteFromResources(resources []UriAddressable, tx pgx.Tx) (err error) {
 	// NOTE: this would need to only do 500-750 (or so) at a time
 	// because of SQL IN clause limit of 1000
 	//db := GetPool()
-
+	ctx := context.Background()
 	// TODO: better ways to do this
 	var uris = make([]string, 0)
 
@@ -610,7 +619,7 @@ func batchDeleteFromResources(resources []UriAddressable, tx *pgx.Tx) (err error
 	//if err != nil {
 	//	return err
 	//}
-	_, err = tx.Exec(sql)
+	_, err = tx.Exec(ctx, sql)
 
 	if err != nil {
 		return err
@@ -651,13 +660,14 @@ func BulkRemoveDeletedResources(typeName string, uriMaker UriFunc) (err error) {
 
 func ResourceCount(typeName string) int {
 	var count int
+	ctx := context.Background()
 	// could switch on type or just add pernr filter
 	// to generic query
 	sql := `SELECT count(*) 
 	FROM resources res
 	WHERE type = '%s'`
 	db := GetPool()
-	row := db.QueryRow(sql, count)
+	row := db.QueryRow(ctx, sql, count)
 	//db.Get(&count, sql)
 	err := row.Scan(&count)
 	if err != nil {

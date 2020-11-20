@@ -1,92 +1,65 @@
 package staging_importer
 
 import (
-	"github.com/pkg/errors"
+	"context"
+	"fmt"
 	"sync"
-	"time"
 
-	"github.com/jackc/pgx"
+	//"github.com/jackc/pgx"
+	"github.com/pkg/errors"
+	//"github.com/jackc/pgx"
+	//"github.com/jackc/pgx"
+	//"github.com/jackc/pgx/pgxpool"
+
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 var connectOnce sync.Once
 
-var Pool *pgx.ConnPool
+var DBPool *pgxpool.Pool
 
 var Name string
 
-func GetPool() *pgx.ConnPool {
-	return Pool
+func GetPool() *pgxpool.Pool {
+	return DBPool
 }
 
 func GetDbName() string {
 	return Name
 }
 
-var statements = map[string]string{
-	"check_if_user_exists": "SELECT exists (SELECT 1 FROM users where username = $1)",
-	/*"get_users": `
-		SELECT array_to_json(COALESCE(array_agg(t), '{}')) FROM (
-			SELECT *, (SELECT up FROM (SELECT firstname, lastname FROM user_profile WHERE user_id=u.id) up) AS profile
-			FROM users AS u
-			ORDER BY u.id
-		) AS t`,
-	"create_user":         "INSERT INTO users (username, score) VALUES ($1, $2) RETURNING id, created",
-	"create_user_profile": "INSERT INTO user_profile (user_id, firstname, lastname) VALUES ($1, $2, $3)",
-	"update_user_score":   "UPDATE users SET score = $2, updated = $3 WHERE id = $1",
-	"log_action":          "INSERT INTO actions (description) VALUES ($1)",
-	"get_actions": `
-		SELECT array_to_json(COALESCE(array_agg(a), '{}')) FROM (
-			SELECT id, description, created
-			FROM actions
-			ORDER BY id
-		) AS a
-	`,
-	*/
-}
-
+// NOTE: Prepared statements can be manually created with the Prepare method.
+// However, this is rarely necessary because pgx includes an automatic statement cache by default
 func MakeConnectionPool(conf Config) error {
 	var err error
 
 	connectOnce.Do(func() {
 		var dbErr error
-		connConfig := pgx.ConnConfig{
-			Host:     conf.Database.Server,
-			Database: conf.Database.Database,
-			User:     conf.Database.User,
-			Password: conf.Database.Password,
-			Port:     uint16(conf.Database.Port),
+		//	# Example DSN
+		//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca pool_max_conns=10
+
+		//# Example URL
+		//postgres://jack:secret@pg.example.com:5432/mydb?sslmode=verify-ca&pool_max_conns=10
+		connUrl := fmt.Sprintf("postgres://%s:%s@%s:%d/%s",
+			conf.Database.User, conf.Database.Password, conf.Database.Server,
+			uint16(conf.Database.Port), conf.Database.Database)
+		config, err := pgxpool.ParseConfig(connUrl)
+		if err != nil {
+			err = errors.Wrap(dbErr, "Call to pgx.NewConnPool failed")
 		}
+		config.MaxConns = int32(conf.Database.MaxConnections)
+		// not allowed to set aquire timeout anymore?
+		//timeout := time.Duration(conf.Database.AcquireTimeout) * time.Second
+		//config.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) error {
+		//	// do something with every new connection
+		//}
 
-		timeout := time.Duration(conf.Database.AcquireTimeout) * time.Second
-		connPool, dbErr := pgx.NewConnPool(pgx.ConnPoolConfig{
-			ConnConfig:     connConfig,
-			AfterConnect:   nil,
-			MaxConnections: conf.Database.MaxConnections,
-			AcquireTimeout: timeout,
-		})
-
+		connPool, dbErr := pgxpool.ConnectConfig(context.Background(), config)
 		if dbErr != nil {
 			err = errors.Wrap(dbErr, "Call to pgx.NewConnPool failed")
 		}
-		Pool = connPool
+		DBPool = connPool
 		Name = conf.Database.Database
 	})
 	return err
-}
-
-func PrepareStatements() error {
-	//db := GetConnection()
-	db := GetPool()
-
-	for name, sql := range statements {
-		// TODO: how to pull these out?
-		_, err := db.Prepare(name, sql)
-		// if put in map - have to remember
-		// to call Close() after using
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
