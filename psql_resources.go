@@ -652,9 +652,14 @@ func BulkRemoveDeletedResources(typeName string, uriMaker UriFunc) (err error) {
 	if err != nil {
 		return err
 	}
-	// then remove from staging?
-	// ClearStagingTypeDeletes(typeName)
-	// or let caller ?
+	// then remove from staging?  or let caller ?
+	// in theory could use to remove from solr, rdf etc...
+	// but could also use notify
+	// no errors - would catch later with 'orphan' check
+	err = ClearStagingTypeDeletes(typeName)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
