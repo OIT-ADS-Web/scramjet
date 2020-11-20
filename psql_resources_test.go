@@ -197,3 +197,55 @@ func TestBatchDeleteResources(t *testing.T) {
 		t.Error("after delete, should not be any records")
 	}
 }
+
+func TestDeleteResource(t *testing.T) {
+	sj.ClearAllStaging()
+	sj.ClearAllResources()
+	typeName := "person"
+
+	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
+	people := []sj.Identifiable{person1}
+	err := sj.StashTypeStaging(typeName, people...)
+
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+
+	alwaysOkay := func(json string) bool { return true }
+	valid, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	if len(valid) != 1 {
+		t.Error("did not retrieve 1 and only 1 record")
+	}
+	sj.BatchMarkValidInStaging(valid)
+	// should be one marked as 'valid' now
+
+	// now move to resources table since they are valid
+	list := sj.RetrieveValidStaging(typeName)
+	uriMaker := func(res sj.StagingResource) string {
+		return fmt.Sprintf("https://scholars.duke.edu/individual/%s", res.Id)
+	}
+	// NOTE: this should clear them out from staging too
+	err = sj.BulkAddResourcesStagingResource(typeName, uriMaker, list...)
+
+	// now it's time to delete one, same one we added - but only Id data
+	person2 := TestPerson{Id: "per0000001"}
+
+	deletes := []sj.Identifiable{person2}
+	err = sj.BulkAddStagingForDelete(typeName, deletes...)
+	if err != nil {
+		t.Errorf("error adding to staging (for delete):%s", err)
+	}
+	deleteCount := sj.StagingDeleteCount(typeName)
+	if deleteCount == 0 {
+		t.Error("after after adding to deletes, no deletes in table")
+	}
+	err = sj.BulkRemoveDeletedResources(typeName, uriMaker)
+	if err != nil {
+		t.Errorf("unable to delete from resources:%s", err)
+	}
+	count := sj.ResourceCount(typeName)
+	if count != 0 {
+		t.Error("after delete, should not be any records")
+	}
+
+}

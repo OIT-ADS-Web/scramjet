@@ -435,13 +435,11 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	_, err = tx.Exec(ctx, sql2)
 
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "commit transaction")
 	}
 	return nil
@@ -552,6 +550,11 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "commit transaction")
 	}
+	err = ClearStagingTypeValid(typeName)
+	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "clearing staging table")
+	}
 	return nil
 }
 
@@ -580,7 +583,7 @@ func BatchDeleteFromResources(resources []UriAddressable) (err error) {
 		return err
 	}
 	// noop if no problems
-	defer tx.Rollback(context.Background())
+	defer tx.Rollback(ctx)
 	for _, chunk := range chunked {
 		// how best to deal with chunked errors?
 		// cancel entire transaction?
@@ -666,14 +669,11 @@ func BulkRemoveDeletedResources(typeName string, uriMaker UriFunc) (err error) {
 func ResourceCount(typeName string) int {
 	var count int
 	ctx := context.Background()
-	// could switch on type or just add pernr filter
-	// to generic query
 	sql := `SELECT count(*) 
 	FROM resources res
-	WHERE type = '%s'`
+	WHERE type = $1`
 	db := GetPool()
-	row := db.QueryRow(ctx, sql, count)
-	//db.Get(&count, sql)
+	row := db.QueryRow(ctx, sql, typeName)
 	err := row.Scan(&count)
 	if err != nil {
 		log.Fatalf("error checking count %v", err)

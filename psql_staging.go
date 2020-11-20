@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	//"github.com/jackc/pgx"
+
 	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
 )
@@ -551,6 +552,30 @@ func ClearStagingType(typeName string) (err error) {
 	return nil
 }
 
+// leave the is_valid = false for investigation
+func ClearStagingTypeValid(typeName string) (err error) {
+	db := GetPool()
+	ctx := context.Background()
+	sql := `DELETE from staging`
+
+	sql += fmt.Sprintf(" WHERE type='%s' and is_valid = true", typeName)
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, sql)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func ClearStagingTypeDeletes(typeName string) (err error) {
 	db := GetPool()
 	ctx := context.Background()
@@ -949,7 +974,6 @@ func RetrieveDeletedStaging(typeName string) []StagingResource {
 	AND to_delete = TRUE
 	`
 	rows, err := db.Query(ctx, sql, typeName)
-
 	for rows.Next() {
 		var id string
 		var typeName string
@@ -960,6 +984,7 @@ func RetrieveDeletedStaging(typeName string) []StagingResource {
 		resources = append(resources, res)
 
 		if err != nil {
+			fmt.Printf("%s\n", err)
 			// is this the correct thing to do?
 			continue
 		}
@@ -979,13 +1004,13 @@ func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
 	list := unique(items)
 
 	for _, item := range list {
-		//str, err := json.Marshal(item)
-		//if err != nil {
-		// return? or let continue loop
-		//	continue
-		//}
-		// NOTE: empty string for data
-		res := &StagingResource{Id: item.Identifier(), Type: typeName, Data: []byte("")}
+		str, err := json.Marshal(item)
+		if err != nil {
+			// return? or let continue loop
+			continue
+		}
+		// NOTE: empty string for data - since it's required for ingest (but not for delete)
+		res := &StagingResource{Id: item.Identifier(), Type: typeName, Data: str}
 		resources = append(resources, *res)
 	}
 
@@ -999,8 +1024,10 @@ func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
 	// supposedly no-op if everything okay
 	defer tx.Rollback(ctx)
 
+	// note: just defaulting is_valid and to_delete
 	tmpSql := `CREATE TEMPORARY TABLE staging_data_deletes_tmp
-	  (id text NOT NULL, type text NOT NULL, data json NOT NULL, to_delete boolean DEFAULT TRUE)
+	  (id text NOT NULL, type text NOT NULL, data json NOT NULL, 
+		is_valid boolean DEFAULT FALSE, to_delete boolean DEFAULT TRUE)
 	  ON COMMIT DROP
 	`
 	_, err = tx.Exec(ctx, tmpSql)
@@ -1016,17 +1043,17 @@ func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
 	}
 
 	_, err = tx.CopyFrom(ctx, pgx.Identifier{"staging_data_deletes_tmp"},
-		[]string{"id", "type", "data", "to_delete"},
+		[]string{"id", "type", "data"},
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating copy rows")
 	}
 	// NOTE: if it exists, just nulling out the data
-	sql2 := `INSERT INTO staging (id, type, data, to_delete)
-	  SELECT id, type, data, to_delete FROM staging_data_deletes_tmp
+	sql2 := `INSERT INTO staging (id, type, data, is_valid, to_delete)
+	  SELECT id, type, data, is_valid, to_delete FROM staging_data_deletes_tmp
 	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data,
-	  to_delete = EXCLUDED.to_delete
+	  is_valid = EXCLUDED.is_valid, to_delete = EXCLUDED.to_delete
 	`
 
 	_, err = tx.Exec(ctx, sql2)
@@ -1040,4 +1067,19 @@ func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
 		return errors.Wrap(err, "commit transaction")
 	}
 	return nil
+}
+
+func StagingDeleteCount(typeName string) int {
+	var count int
+	ctx := context.Background()
+	sql := `SELECT count(*) 
+	FROM staging stg
+	WHERE type = $1 and to_delete = TRUE`
+	db := GetPool()
+	row := db.QueryRow(ctx, sql, typeName)
+	err := row.Scan(&count)
+	if err != nil {
+		log.Fatalf("error checking count %v", err)
+	}
+	return count
 }
