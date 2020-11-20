@@ -15,7 +15,7 @@ func setup() {
 		Server:         "localhost",
 		Database:       "docker",
 		Password:       "docker",
-		Port:           5432,
+		Port:           5433,
 		User:           "docker",
 		MaxConnections: 1,
 		AcquireTimeout: 30,
@@ -47,16 +47,10 @@ func setup() {
 		fmt.Println("resources table not found")
 		sj.MakeResourceSchema()
 	}
-
-	// empty everything out for tests
-	//sj.ClearAllStaging()
-	//sj.ClearAllResources()
 }
 
 func shutdown() {
-	//db := sj.GetConnection()
 	db := sj.GetPool()
-
 	db.Close()
 }
 func TestMain(m *testing.M) {
@@ -251,5 +245,36 @@ func TestBatchInValid(t *testing.T) {
 	list := sj.RetrieveInvalidStaging(typeName)
 	if len(list) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
+	}
+}
+
+func TestBatchMarkDelete(t *testing.T) {
+	// clear out staging here
+	sj.ClearAllStaging()
+	typeName := "person"
+
+	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
+	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+
+	people := []sj.Identifiable{person1, person2}
+	err := sj.StashTypeStaging(typeName, people...)
+
+	if err != nil {
+		fmt.Println("could not save")
+		t.Errorf("err=%v\n", err)
+	}
+	alwaysOkay := func(json string) bool { return true }
+	valid, _ := sj.FilterTypeStaging("person", alwaysOkay)
+	// should be no rejects
+
+	// NOTE: just immediately marking for delete
+	err = sj.BatchMarkDeleteInStaging(valid)
+	if err != nil {
+		fmt.Println("could not mark for delete")
+		t.Errorf("err=%v\n", err)
+	}
+	list := sj.RetrieveDeletedStaging(typeName)
+	if len(list) != 2 {
+		t.Error("did not retrieve 2 and only 2 record (for delete)")
 	}
 }

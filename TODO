@@ -50,13 +50,6 @@ Intake
 Launch
 
 
-
-
-"marching cubes"
-
-https://redcap.duke.edu/redcap/surveys/?sq=ehSTBatWEZ
-
-
 CREATE TABLE resources_audit (
     operation char(1) NOT NULL,
     stamp timestamp NOT NULL,
