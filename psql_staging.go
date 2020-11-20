@@ -574,29 +574,6 @@ func ClearStagingTypeDeletes(typeName string) (err error) {
 	return nil
 }
 
-func ClearStagingTypeDeletes(typeName string) (err error) {
-	db := GetPool()
-
-	sql := `DELETE from staging`
-
-	sql += fmt.Sprintf(" WHERE type='%s' AND to_delete = TRUE", typeName)
-
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(sql)
-	if err != nil {
-		return err
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // only add (presumed existence already checked)
 func AddStagingResource(obj interface{}, id string, typeName string) (err error) {
 	db := GetPool()
@@ -1048,7 +1025,7 @@ func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
 	// NOTE: if it exists, just nulling out the data
 	sql2 := `INSERT INTO staging (id, type, data, to_delete)
 	  SELECT id, type, data, to_delete FROM staging_data_deletes_tmp
-	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data, 
+	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data,
 	  to_delete = EXCLUDED.to_delete
 	`
 
@@ -1059,168 +1036,6 @@ func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
 	}
 
 	err = tx.Commit(ctx)
-	if err != nil {
-		return errors.Wrap(err, "commit transaction")
-	}
-	return nil
-}
-
-func BatchMarkDeleteInStaging(resources []StagingResource) (err error) {
-	db := GetPool()
-	chunked := chunkedStaging(resources, 500)
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	// noop if no problems
-	defer tx.Rollback()
-	for _, chunk := range chunked {
-		// how to deal with chunked error?
-		err := batchMarkDeleteInStaging(chunk, tx)
-		if err != nil {
-			return err
-		}
-	}
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func batchMarkDeleteInStaging(resources []StagingResource, tx *pgx.Tx) (err error) {
-	// NOTE: this would need to only do 500-750 (or so) at a time
-	// because of SQL IN clause limit of 1000
-	//db := GetPool()
-
-	// TODO: better ways to do this
-	var clauses = make([]string, 0)
-
-	for _, resource := range resources {
-		s := fmt.Sprintf("('%s', '%s')", resource.Id, resource.Type)
-		clauses = append(clauses, s)
-	}
-
-	inClause := strings.Join(clauses, ", ")
-
-	sql := fmt.Sprintf(`UPDATE staging set to_delete = TRUE WHERE (id, type) IN (
-		  %s
-		)`, inClause)
-
-	//tx, err := db.Begin()
-	//if err != nil {
-	//	return err
-	//}
-	_, err = tx.Exec(sql)
-
-	if err != nil {
-		return err
-	}
-	//err = tx.Commit()
-	//if err != nil {
-	//	return err
-	//}
-	return nil
-}
-
-func RetrieveDeletedStaging(typeName string) []StagingResource {
-	db := GetPool()
-
-	resources := []StagingResource{}
-
-	sql := `SELECT id, type, data 
-	FROM staging 
-	WHERE type = $1
-	AND to_delete = TRUE
-	`
-	rows, err := db.Query(sql, typeName)
-
-	for rows.Next() {
-		var id string
-		var typeName string
-		var data []byte
-
-		err = rows.Scan(&id, &typeName, &data)
-		res := StagingResource{Id: id, Type: typeName, Data: data}
-		resources = append(resources, res)
-
-		if err != nil {
-			// is this the correct thing to do?
-			continue
-		}
-	}
-
-	if err != nil {
-		log.Fatalln(err)
-	}
-	return resources
-}
-
-func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
-	var resources = make([]StagingResource, 0)
-	var err error
-	// NOTE: not sure if these are necessary
-	list := unique(items)
-
-	for _, item := range list {
-		//str, err := json.Marshal(item)
-		//if err != nil {
-		// return? or let continue loop
-		//	continue
-		//}
-		// NOTE: empty string for data
-		res := &StagingResource{Id: item.Identifier(), Type: typeName, Data: []byte("")}
-		resources = append(resources, *res)
-	}
-
-	db := GetPool()
-
-	tx, err := db.Begin()
-	if err != nil {
-		fmt.Printf("error starting transaction =%v\n", err)
-	}
-
-	// supposedly no-op if everything okay
-	defer tx.Rollback()
-
-	tmpSql := `CREATE TEMPORARY TABLE staging_data_deletes_tmp
-	  (id text NOT NULL, type text NOT NULL, data json NOT NULL, to_delete boolean DEFAULT TRUE)
-	  ON COMMIT DROP
-	`
-	_, err = tx.Exec(tmpSql)
-
-	if err != nil {
-		return errors.Wrap(err, "creating temporary table")
-	}
-
-	// NOTE: don't commit yet (see ON COMMIT DROP)
-	inputRows := [][]interface{}{}
-	for _, res := range resources {
-		inputRows = append(inputRows, []interface{}{res.Id, res.Type, res.Data})
-	}
-
-	_, err = tx.CopyFrom(pgx.Identifier{"staging_data_deletes_tmp"},
-		[]string{"id", "type", "data", "to_delete"},
-		pgx.CopyFromRows(inputRows))
-
-	if err != nil {
-		return err
-	}
-	// NOTE: if it exists, just nulling out the data
-	sql2 := `INSERT INTO staging (id, type, data, to_delete)
-	  SELECT id, type, data, to_delete FROM staging_data_deletes_tmp
-	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data, 
-	  to_delete = EXCLUDED.to_delete
-	`
-
-	_, err = tx.Exec(sql2)
-
-	if err != nil {
-		return errors.Wrap(err, "move from temporary to real table")
-	}
-
-	err = tx.Commit()
 	if err != nil {
 		return errors.Wrap(err, "commit transaction")
 	}
