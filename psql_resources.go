@@ -336,7 +336,9 @@ func uniqueUri(idSlice []UriAddressable) []UriAddressable {
 	return list
 }
 
-// add many at a time (upsert)
+// add many at a time (upsert) - don't need a makeUri function
+// (that's what's different from BulkAddResourcesStagingResource)
+// FIXME: a lot of boilerplate code exactly the same
 func BulkAddResources(typeName string, items ...UriAddressable) error {
 	var resources = make([]Resource, 0)
 	var err error
@@ -386,8 +388,7 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
 	  (uri text NOT NULL, type text NOT NULL, hash text NOT NULL,
 		data json NOT NULL, data_b jsonb NOT NULL,
-		created_at TIMESTAMP DEFAULT NOW(), 
-		updated_at TIMESTAMP DEFAULT NOW()
+		PRIMARY KEY(uri, type)
 	  )
 	  ON COMMIT DROP
 	`
@@ -424,17 +425,31 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 		fmt.Printf("error=%s\n", err)
 		return err
 	}
-	sql2 := `INSERT INTO resources (uri, type, hash, data, data_b)
-	  SELECT uri, type, hash, data, data_b 
+
+	sqlUpsert := `INSERT INTO resources (uri, type, hash, data, data_b)
+	  SELECT uri, type, hash, data, data_b
 	  FROM resource_data_tmp
-		ON CONFLICT (uri, type) DO UPDATE SET data = EXCLUDED.data, 
-	  data_b = EXCLUDED.data_b, hash = EXCLUDED.hash, 
-	  updated_at = NOW()
+		ON CONFLICT (uri, type) DO UPDATE SET data = EXCLUDED.data,
+		   data_b = EXCLUDED.data_b, hash = EXCLUDED.hash
 	`
-
-	_, err = tx.Exec(ctx, sql2)
-
+	_, err = tx.Exec(ctx, sqlUpsert)
 	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "move from temporary to real table")
+	}
+
+	// now flag as 'updated' if hash changed (had to split this up into two sql calls)
+	// TODO: in theory uri should be primary key and enough to identify
+	sqlUpdates := `UPDATE resources set updated_at = NOW()
+	where (uri,type) in (
+		select rdt.uri, rdt.type from resource_data_tmp rdt
+		join resources r on (r.uri = rdt.uri and r.type = rdt.type)
+		where r.hash != rdt.hash
+	)`
+
+	_, err = tx.Exec(ctx, sqlUpdates)
+	if err != nil {
+		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
@@ -464,6 +479,7 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 			return err
 		}
 
+		// same value - is that a problem?
 		err = dataB.Set(str)
 
 		if err != nil {
@@ -491,8 +507,7 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
 	  (uri text NOT NULL, type text NOT NULL, hash text NOT NULL,
 		data json NOT NULL, data_b jsonb NOT NULL,
-		created_at TIMESTAMP DEFAULT NOW(), 
-		updated_at TIMESTAMP DEFAULT NOW()
+		PRIMARY KEY(uri, type)
 	  )
 	  ON COMMIT DROP
 	`
@@ -508,6 +523,13 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 	for _, res := range resources {
 		x := []byte{}
 		readError := res.Data.AssignTo(&x)
+		if readError != nil {
+			// do something else here, mark error somewhere?
+			fmt.Printf("skipping %s:%s\n", res.Uri, readError)
+			continue
+		}
+		y := []byte{}
+		readError = res.DataB.AssignTo(&y)
 
 		if readError != nil {
 			// do something else here, mark error somewhere?
@@ -518,7 +540,7 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 			res.Type,
 			res.Hash,
 			x,
-			x})
+			y})
 	}
 
 	_, err = tx.CopyFrom(ctx, pgx.Identifier{"resource_data_tmp"},
@@ -529,17 +551,31 @@ func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ..
 		fmt.Printf("error=%s\n", err)
 		return err
 	}
+
 	// updated_at - should probably be timezone aware ...
-	sql2 := `INSERT INTO resources (uri, type, hash, data, data_b)
+	// ON CONFLICT (uri, type) where hash != EXCLUDED.hash
+	sqlUpsert := `INSERT INTO resources (uri, type, hash, data, data_b)
 	  SELECT uri, type, hash, data, data_b 
 	  FROM resource_data_tmp
 		ON CONFLICT (uri, type) DO UPDATE SET data = EXCLUDED.data, 
-	  data_b = EXCLUDED.data_b, hash = EXCLUDED.hash, 
-	  updated_at = NOW()
+		   data_b = EXCLUDED.data_b, hash = EXCLUDED.hash
 	`
-	// TODO: how to capture excluded here - e.g. updates vs. inserts
-	_, err = tx.Exec(ctx, sql2)
+	_, err = tx.Exec(ctx, sqlUpsert)
+	if err != nil {
+		log.Printf("error=%s\n", err)
+		return errors.Wrap(err, "move from temporary to real table")
+	}
 
+	// now flag as 'updated' if hash changed (had to split this up into two sql calls)
+	// TODO: in theory uri should be primary key and enough to identify
+	sqlUpdates := `UPDATE resources set updated_at = NOW()
+	where (uri,type) in (
+		select rdt.uri, rdt.type from resource_data_tmp rdt
+		join resources r on (r.uri = rdt.uri and r.type = rdt.type)
+		where r.hash != rdt.hash
+	)`
+
+	_, err = tx.Exec(ctx, sqlUpdates)
 	if err != nil {
 		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
@@ -660,6 +696,32 @@ func BulkRemoveDeletedResources(typeName string, uriMaker UriFunc) (err error) {
 	// but could also use notify
 	// no errors - would catch later with 'orphan' check
 	err = ClearStagingTypeDeletes(typeName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// TODO: maybe a more intuitive name - especially if this is the only
+// way to delete - like BulkDelete()
+func BulkDeleteResources(typeName string, uriMaker UriFunc, items ...Identifiable) error {
+	err := BulkAddStagingForDelete(typeName, items...)
+	if err != nil {
+		return err
+	}
+	err = BulkRemoveDeletedResources(typeName, uriMaker)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// TODO: different from above, but name overly similar
+func BulkRemoveResources(items ...UriAddressable) error {
+	// should it go to trouble of adding to staging as delete
+	// and then turn around and delete?  but then need
+	// the id-matcher (uriMaker)
+	err := BatchDeleteFromResources(items)
 	if err != nil {
 		return err
 	}
