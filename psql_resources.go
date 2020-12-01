@@ -30,6 +30,29 @@ type Resource struct {
 	UpdatedAt time.Time    `db:"updated_at"`
 }
 
+// NOTE: this means all things have to have id field
+type GenericResource struct {
+	Id string `json:"id"`
+}
+
+// just a stub so we can read from resources table
+// and get the id match back to staging (for deletes)
+func (g GenericResource) Identifier() string {
+	return g.Id
+}
+
+func (res Resource) Identifier() string {
+	identified := GenericResource{}
+	if res.DataB.Status == pgtype.Present {
+		b := res.DataB.Bytes
+		err := json.Unmarshal(b, &identified)
+		if err != nil {
+			fmt.Printf("error unmarshalling json %#v\n", res)
+		}
+	}
+	return identified.Identifier()
+}
+
 //func DeriveUri(u UriAddressable) string { return u.URI() }
 
 // Resources ...
@@ -460,13 +483,14 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	return nil
 }
 
-func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ...StagingResource) error {
+func BulkMoveStagingToResources(typeName string, uriMaker UriFunc, items ...StagingResource) error {
 	var resources = make([]Resource, 0)
 	var err error
 	ctx := context.Background()
 
 	for _, item := range items {
 		str := item.Data
+		// need way to get URI (given a staging resource)
 		uri := uriMaker(item)
 
 		hash := makeHash(string(str))
@@ -623,7 +647,7 @@ func BatchDeleteFromResources(resources []UriAddressable) (err error) {
 	for _, chunk := range chunked {
 		// how best to deal with chunked errors?
 		// cancel entire transaction?
-		err := batchDeleteFromResources(chunk, tx)
+		err := batchDeleteFromResources(ctx, chunk, tx)
 		if err != nil {
 			return err
 		}
@@ -635,11 +659,38 @@ func BatchDeleteFromResources(resources []UriAddressable) (err error) {
 	return nil
 }
 
-func batchDeleteFromResources(resources []UriAddressable, tx pgx.Tx) (err error) {
+// get typename ??
+func BatchDeleteFromResources2(resources []StagingResource) (err error) {
+	db := GetPool()
+	ctx := context.Background()
+	chunked := chunkedStaging(resources, 500)
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	// noop if no problems
+	defer tx.Rollback(ctx)
+	for _, chunk := range chunked {
+		// how best to deal with chunked errors?
+		// cancel entire transaction?
+		err := batchDeleteFromResources2(ctx, chunk, tx)
+		if err != nil {
+			return err
+		}
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// TODO: lower, uppercase matching names maybe confusing
+func batchDeleteFromResources(ctx context.Context, resources []UriAddressable, tx pgx.Tx) (err error) {
 	// NOTE: this would need to only do 500-750 (or so) at a time
 	// because of SQL IN clause limit of 1000
 	//db := GetPool()
-	ctx := context.Background()
+	//ctx := context.Background()
 	// TODO: better ways to do this
 	var uris = make([]string, 0)
 
@@ -670,6 +721,42 @@ func batchDeleteFromResources(resources []UriAddressable, tx pgx.Tx) (err error)
 	return nil
 }
 
+// how to enusure staging-resource IS identifiable
+func batchDeleteFromResources2(ctx context.Context, resources []StagingResource, tx pgx.Tx) (err error) {
+	//ctx := context.Background()
+	// TODO: better ways to do this
+	//var uris = make([]string, 0)
+
+	var clauses = make([]string, 0)
+	for _, resource := range resources {
+		//s := fmt.Sprintf("'%s'", resource.Identifier())
+		s := fmt.Sprintf("('%s', '%s')", resource.Id, resource.Type)
+		//uris = append(uris, s)
+		clauses = append(clauses, s)
+	}
+
+	// what about including 'type'?
+	//inClause := strings.Join(uris, ", ")
+
+	inClause := strings.Join(clauses, ", ")
+
+	//sql := fmt.Sprintf(`DELETE from resources WHERE data_b->>'id' IN (
+	//	  %s
+	//)`, inClause)
+
+	// not crazy about this ...
+	sql := fmt.Sprintf(`DELETE from resources WHERE (data_b->>'id', type) IN (
+		%s
+	)`, inClause)
+
+	_, err = tx.Exec(ctx, sql)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // just a stub - so I can match staging to resource table
 type UriOnly struct {
 	Fn  UriFunc
@@ -688,6 +775,30 @@ func BulkRemoveDeletedResources(typeName string, uriMaker UriFunc) (err error) {
 		toRemove = append(toRemove, stub)
 	}
 	err = BatchDeleteFromResources(toRemove)
+	// err = BatchDeleteFromResources2(deletes)
+	if err != nil {
+		return err
+	}
+	// then remove from staging?  or let caller ?
+	// in theory could use to remove from solr, rdf etc...
+	// but could also use notify
+	// no errors - would catch later with 'orphan' check
+	err = ClearStagingTypeDeletes(typeName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func BulkRemoveDeletedResources2(typeName string) (err error) {
+	deletes := RetrieveDeletedStaging(typeName)
+	//toRemove := []UriAddressable{}
+	//for _, res := range deletes {
+	//	stub := UriOnly{Res: res, Fn: uriMaker}
+	//	toRemove = append(toRemove, stub)
+	//}
+	//err = BatchDeleteFromResources(toRemove)
+	err = BatchDeleteFromResources2(deletes)
 	if err != nil {
 		return err
 	}

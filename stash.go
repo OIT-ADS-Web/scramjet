@@ -64,6 +64,20 @@ func (s stagingStasher) StashItems() {
 	}
 }
 
+func (s stagingStasher) DeleteItems() {
+	for k, v := range s.Items() {
+		fmt.Printf("**** %s *****\n", k)
+		for _, item := range v {
+			fmt.Printf("->%s\n", item.Identifier())
+		}
+		// wouldn't actually delete
+		err := BulkAddStagingForDelete(k, v...)
+		if err != nil {
+			fmt.Printf("saving error: %v\n", err)
+		}
+	}
+}
+
 type ResourceStasher interface {
 	Items() map[string][]UriAddressable
 	AddItems(string, ...UriAddressable)
@@ -103,6 +117,19 @@ func (s resourceStasher) StashItems() {
 			fmt.Printf("->%s\n", item.Uri())
 		}
 		err := BulkAddResources(k, v...)
+		if err != nil {
+			fmt.Printf("saving error: %v\n", err)
+		}
+	}
+}
+
+func (s resourceStasher) DeleteItems() {
+	for k, v := range s.Items() {
+		fmt.Printf("**** %s *****\n", k)
+		for _, item := range v {
+			fmt.Printf("->%s\n", item.Uri())
+		}
+		err := BulkRemoveResources(v...)
 		if err != nil {
 			fmt.Printf("saving error: %v\n", err)
 		}

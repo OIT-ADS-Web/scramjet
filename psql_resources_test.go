@@ -225,7 +225,7 @@ func TestDeleteResource(t *testing.T) {
 		return fmt.Sprintf("https://scholars.duke.edu/individual/%s", res.Id)
 	}
 	// NOTE: this should clear them out from staging too
-	err = sj.BulkAddResourcesStagingResource(typeName, uriMaker, list...)
+	err = sj.BulkMoveStagingToResources(typeName, uriMaker, list...)
 
 	// now it's time to delete one, same one we added - but only Id data
 	person2 := TestPerson{Id: "per0000001"}

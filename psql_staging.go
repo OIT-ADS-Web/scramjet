@@ -24,6 +24,10 @@ type StagingResource struct {
 	ToDelete sql.NullBool `db:"to_delete"`
 }
 
+func (res StagingResource) Identifier() string {
+	return res.Id
+}
+
 // Staging ...
 func RetrieveTypeStaging(typeName string) []StagingResource {
 	db := GetPool()
@@ -996,6 +1000,9 @@ func RetrieveDeletedStaging(typeName string) []StagingResource {
 	return resources
 }
 
+// id is always string
+//func BulkAddStagingForDelete(typeName string, ids ...string) error {
+
 func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
 	var resources = make([]StagingResource, 0)
 	var err error
@@ -1009,7 +1016,7 @@ func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
 			// return? or let continue loop
 			continue
 		}
-		// NOTE: empty string for data - since it's required for ingest (but not for delete)
+		// NOTE: data (str) will be largely empty - this is just a delete flag
 		res := &StagingResource{Id: item.Identifier(), Type: typeName, Data: str}
 		resources = append(resources, *res)
 	}
