@@ -219,12 +219,6 @@ func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]StagingResou
 }
 
 func StashTypeStaging(typeName string, docs ...Identifiable) error {
-	// allow one at a time to debug?
-	/*
-		for _, doc := range docs {
-			AddStagingResource(doc, doc.Identifier(), typeName)
-		}
-	*/
 	err := BulkAddStaging(typeName, docs...)
 	return err
 }
@@ -286,24 +280,15 @@ func batchMarkInvalidInStaging(resources []StagingResource) (err error) {
 	tx, err := db.Begin(ctx)
 
 	if err != nil {
-		//log.Printf(">error beginning transaction:%v", err)
-		// TODO: shouldn't exit in library
-		//os.Exit(1)
 		return err
 	}
 	_, err = tx.Exec(ctx, sql)
 
 	if err != nil {
-		//log.Printf(">ERROR(UPDATE):%v", err)
-		// TODO: shouldn't exit in library
-		//os.Exit(1)
 		return err
 	}
 	err = tx.Commit(ctx)
 	if err != nil {
-		//log.Printf(">ERROR(UPDATE) - commit:%v", err)
-		// TODO: shouldn't exit in library
-		//os.Exit(1)
 		return err
 	}
 	return nil
@@ -317,9 +302,6 @@ func MarkInvalidInStaging(res StagingResource) (err error) {
 	tx, err := db.Begin(ctx)
 
 	if err != nil {
-		//log.Printf(">error beginning transaction:%v", err)
-		// TODO: shouldn't exit in library
-		//os.Exit(1)
 		return err
 	}
 
@@ -447,7 +429,6 @@ func StagingTableExists() bool {
 	db := GetPool()
 	ctx := context.Background()
 	catalog := GetDbName()
-	// FIXME: not sure this is right
 	sqlExists := `SELECT EXISTS (
         SELECT 1
         FROM   information_schema.tables 
@@ -462,8 +443,6 @@ func StagingTableExists() bool {
 	return exists
 }
 
-// 'type' should match up to a schema
-// NOTE: could call Fatalf
 func MakeStagingSchema() {
 	sql := `create table staging (
         id text NOT NULL,
@@ -693,13 +672,6 @@ func SaveStagingResource(obj Identifiable, typeName string) (err error) {
 func SaveStagingResourceDirect(res StagingResource, typeName string) (err error) {
 	db := GetPool()
 	ctx := context.Background()
-	//str, err := json.Marshal(obj)
-	//if err != nil {
-	//	return err
-	//}
-
-	//var found StagingResource
-	//res := &StagingResource{Id: obj.Identifier(), Type: typeName, Data: str}
 
 	findSql := `SELECT id FROM staging
 	  WHERE (id = $1 AND type = $2)`
@@ -762,15 +734,8 @@ func StagingResourceExists(uri string, typeName string) bool {
 	return exists
 }
 
-// should probably prepare statements beforehand
-// https://github.com/andreiavrammsd/go-postgresql-batch-operations
-//
 // stole code from here:
 //https://stackoverflow.com/questions/12486436/
-
-// NOTE: was getting "widgets_import.Person is not hashable" trying
-// to call (even though tests seemed to work) - so changing
-// the hash to the Identifier() seemed to fix that
 func unique(idSlice []Identifiable) []Identifiable {
 	keys := make(map[string]bool)
 	list := []Identifiable{}
@@ -933,9 +898,6 @@ func BatchMarkDeleteInStaging(resources []StagingResource) (err error) {
 }
 
 func batchMarkDeleteInStaging(resources []StagingResource, tx pgx.Tx) (err error) {
-	// NOTE: this would need to only do 500-750 (or so) at a time
-	// because of SQL IN clause limit of 1000
-	//db := GetPool()
 	ctx := context.Background()
 	// TODO: better ways to do this
 	var clauses = make([]string, 0)
@@ -950,20 +912,11 @@ func batchMarkDeleteInStaging(resources []StagingResource, tx pgx.Tx) (err error
 	sql := fmt.Sprintf(`UPDATE staging set to_delete = TRUE WHERE (id, type) IN (
 		  %s
 		)`, inClause)
-
-	//tx, err := db.Begin()
-	//if err != nil {
-	//	return err
-	//}
 	_, err = tx.Exec(ctx, sql)
 
 	if err != nil {
 		return err
 	}
-	//err = tx.Commit()
-	//if err != nil {
-	//	return err
-	//}
 	return nil
 }
 
@@ -999,9 +952,6 @@ func RetrieveDeletedStaging(typeName string) []StagingResource {
 	}
 	return resources
 }
-
-// id is always string
-//func BulkAddStagingForDelete(typeName string, ids ...string) error {
 
 func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
 	var resources = make([]StagingResource, 0)

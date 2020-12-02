@@ -53,10 +53,6 @@ func (res Resource) Identifier() string {
 	return identified.Identifier()
 }
 
-//func DeriveUri(u UriAddressable) string { return u.URI() }
-
-// Resources ...
-
 // TODO: could just send in date - leave it up to library user
 // to determine how it's figured out
 func RetrieveTypeResources(typeName string) (error, []Resource) {
@@ -143,13 +139,14 @@ func makeHash(text string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
-// FIXME: would like a way to do multiple at a time - some kind of upsert?
+// only does one at a time (not typically used)
 func SaveResource(obj UriAddressable, typeName string) (err error) {
 	ctx := context.Background()
 	str, err := json.Marshal(obj)
 
 	if err != nil {
 		log.Fatalln(err)
+		return err
 	}
 
 	db := GetPool()
@@ -184,7 +181,9 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 	notFoundError := row.Scan(&found.Uri, &found.Type)
 
 	tx, err := db.Begin(ctx)
-
+	if err != nil {
+		return err
+	}
 	// either insert or update
 	if notFoundError != nil {
 		// TODO: created_at, updated_at
@@ -230,7 +229,6 @@ func ResourceTableExists() bool {
 	db := GetPool()
 
 	catalog := GetDbName()
-	// FIXME: not sure this is right
 	sqlExists := `SELECT EXISTS (
         SELECT 1
         FROM   information_schema.tables 
@@ -280,8 +278,6 @@ func MakeResourceSchema() {
 	}
 }
 
-// TODO: should probably return error -  not have os.Exit
-
 func DropResources() error {
 	db := GetPool()
 	ctx := context.Background()
@@ -323,7 +319,6 @@ func ClearAllResources() (err error) {
 	return nil
 }
 
-// TODO: should probably return error -  not have os.Exit
 func ClearResourceType(typeName string) (err error) {
 	db := GetPool()
 	ctx := context.Background()
@@ -359,8 +354,7 @@ func uniqueUri(idSlice []UriAddressable) []UriAddressable {
 	return list
 }
 
-// add many at a time (upsert) - don't need a makeUri function
-// (that's what's different from BulkAddResourcesStagingResource)
+// add many at a time (upsert) -
 // FIXME: a lot of boilerplate code exactly the same
 func BulkAddResources(typeName string, items ...UriAddressable) error {
 	var resources = make([]Resource, 0)
@@ -407,7 +401,6 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 
 	// supposedly no-op if everything okay
 	defer tx.Rollback(ctx)
-
 	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
 	  (uri text NOT NULL, type text NOT NULL, hash text NOT NULL,
 		data json NOT NULL, data_b jsonb NOT NULL,
@@ -662,28 +655,17 @@ func BatchDeleteStagingFromResources(resources []StagingResource) (err error) {
 
 // how to enusure staging-resource IS identifiable
 func batchDeleteStagingFromResources(ctx context.Context, resources []StagingResource, tx pgx.Tx) (err error) {
-	//ctx := context.Background()
-	// TODO: better ways to do this
-	//var uris = make([]string, 0)
-
 	var clauses = make([]string, 0)
 	for _, resource := range resources {
-		//s := fmt.Sprintf("'%s'", resource.Identifier())
 		s := fmt.Sprintf("('%s', '%s')", resource.Id, resource.Type)
-		//uris = append(uris, s)
 		clauses = append(clauses, s)
 	}
 
-	// what about including 'type'?
-	//inClause := strings.Join(uris, ", ")
-
 	inClause := strings.Join(clauses, ", ")
 
-	//sql := fmt.Sprintf(`DELETE from resources WHERE data_b->>'id' IN (
-	//	  %s
-	//)`, inClause)
-
-	// not crazy about this ...
+	// TODO: not crazy about this ... but hoping for something that did
+	// not require anything specific in the json data
+	// could at least allow a param "idColumn" (would be 'id')
 	sql := fmt.Sprintf(`DELETE from resources WHERE (data_b->>'id', type) IN (
 		%s
 	)`, inClause)
@@ -753,18 +735,12 @@ func (uri UriOnly) Uri() string {
 
 func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
 	deletes := RetrieveDeletedStaging(typeName)
-	//toRemove := []UriAddressable{}
-	//for _, res := range deletes {
-	//	stub := UriOnly{Res: res, Fn: uriMaker}
-	//	toRemove = append(toRemove, stub)
-	//}
-	//err = BatchDeleteFromResources(toRemove)
 	fmt.Printf("should remove %d records\n", len(deletes))
 	err = BatchDeleteStagingFromResources(deletes)
 	if err != nil {
 		return err
 	}
-	// then remove from staging?  or let caller ?
+	// TODO: then remove from staging?  or let caller ?
 	// in theory could use to remove from solr, rdf etc...
 	// but could also use notify
 	// no errors - would catch later with 'orphan' check
@@ -777,8 +753,7 @@ func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
 
 func BulkRemoveResources(items ...UriAddressable) error {
 	// should it go to trouble of adding to staging as delete
-	// and then turn around and delete?  but then need
-	// the id-matcher (uriMaker)
+	// and then turn around and delete?
 	err := BatchDeleteResourcesFromResources(items)
 	if err != nil {
 		return err

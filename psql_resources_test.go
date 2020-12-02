@@ -20,8 +20,6 @@ func makeStub(typeName string) (sj.UriAddressable, error) {
 	return nil, errors.New("No match")
 }
 
-//UriFuncfunc uriMaker(sj.UriAddressabl)
-
 func TestResourcesIngest(t *testing.T) {
 	// NOTE: this is kind of re-hash of test in staging_test
 	sj.ClearAllStaging()
@@ -184,10 +182,6 @@ func TestBatchDeleteResources(t *testing.T) {
 	}
 
 	// then delete
-	//uriMaker := func(res sj.StagingResource) string {
-	//	return fmt.Sprintf("https://scholars.duke.edu/individual/%s", res.Id)
-	//}
-	//err = sj.BulkRemoveStagingDeletedFromResources(typeName, uriMaker)
 	err = sj.BulkRemoveStagingDeletedFromResources(typeName)
 	if err != nil {
 		fmt.Println("could not mark for delete")
@@ -243,7 +237,6 @@ func TestDeleteResource(t *testing.T) {
 	if deleteCount == 0 {
 		t.Error("after after adding to deletes, no deletes in table")
 	}
-	//err = sj.BulkRemoveStagingDeletedFromResources(typeName, uriMaker)
 	err = sj.BulkRemoveStagingDeletedFromResources(typeName)
 
 	if err != nil {
