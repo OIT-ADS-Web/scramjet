@@ -20,8 +20,6 @@ func makeStub(typeName string) (sj.UriAddressable, error) {
 	return nil, errors.New("No match")
 }
 
-//UriFuncfunc uriMaker(sj.UriAddressabl)
-
 func TestResourcesIngest(t *testing.T) {
 	// NOTE: this is kind of re-hash of test in staging_test
 	sj.ClearAllStaging()
@@ -178,13 +176,13 @@ func TestBatchDeleteResources(t *testing.T) {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
 	// now turn around and mark for delete
-	sj.BatchMarkDeleteInStaging(valid)
+	err = sj.BatchMarkDeleteInStaging(valid)
+	if err != nil {
+		t.Error("error marking records valid")
+	}
 
 	// then delete
-	uriMaker := func(res sj.StagingResource) string {
-		return fmt.Sprintf("https://scholars.duke.edu/individual/%s", res.Id)
-	}
-	err = sj.BulkRemoveDeletedResources(typeName, uriMaker)
+	err = sj.BulkRemoveStagingDeletedFromResources(typeName)
 	if err != nil {
 		fmt.Println("could not mark for delete")
 		t.Errorf("err=%v\n", err)
@@ -225,7 +223,7 @@ func TestDeleteResource(t *testing.T) {
 		return fmt.Sprintf("https://scholars.duke.edu/individual/%s", res.Id)
 	}
 	// NOTE: this should clear them out from staging too
-	err = sj.BulkAddResourcesStagingResource(typeName, uriMaker, list...)
+	err = sj.BulkMoveStagingToResources(typeName, uriMaker, list...)
 
 	// now it's time to delete one, same one we added - but only Id data
 	person2 := TestPerson{Id: "per0000001"}
@@ -239,7 +237,8 @@ func TestDeleteResource(t *testing.T) {
 	if deleteCount == 0 {
 		t.Error("after after adding to deletes, no deletes in table")
 	}
-	err = sj.BulkRemoveDeletedResources(typeName, uriMaker)
+	err = sj.BulkRemoveStagingDeletedFromResources(typeName)
+
 	if err != nil {
 		t.Errorf("unable to delete from resources:%s", err)
 	}

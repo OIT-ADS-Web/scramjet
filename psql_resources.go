@@ -30,9 +30,28 @@ type Resource struct {
 	UpdatedAt time.Time    `db:"updated_at"`
 }
 
-//func DeriveUri(u UriAddressable) string { return u.URI() }
+// NOTE: this means all things have to have id field
+type GenericResource struct {
+	Id string `json:"id"`
+}
 
-// Resources ...
+// just a stub so we can read from resources table
+// and get the id match back to staging (for deletes)
+func (g GenericResource) Identifier() string {
+	return g.Id
+}
+
+func (res Resource) Identifier() string {
+	identified := GenericResource{}
+	if res.DataB.Status == pgtype.Present {
+		b := res.DataB.Bytes
+		err := json.Unmarshal(b, &identified)
+		if err != nil {
+			fmt.Printf("error unmarshalling json %#v\n", res)
+		}
+	}
+	return identified.Identifier()
+}
 
 // TODO: could just send in date - leave it up to library user
 // to determine how it's figured out
@@ -120,13 +139,14 @@ func makeHash(text string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
-// FIXME: would like a way to do multiple at a time - some kind of upsert?
+// only does one at a time (not typically used)
 func SaveResource(obj UriAddressable, typeName string) (err error) {
 	ctx := context.Background()
 	str, err := json.Marshal(obj)
 
 	if err != nil {
 		log.Fatalln(err)
+		return err
 	}
 
 	db := GetPool()
@@ -161,7 +181,9 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 	notFoundError := row.Scan(&found.Uri, &found.Type)
 
 	tx, err := db.Begin(ctx)
-
+	if err != nil {
+		return err
+	}
 	// either insert or update
 	if notFoundError != nil {
 		// TODO: created_at, updated_at
@@ -207,7 +229,6 @@ func ResourceTableExists() bool {
 	db := GetPool()
 
 	catalog := GetDbName()
-	// FIXME: not sure this is right
 	sqlExists := `SELECT EXISTS (
         SELECT 1
         FROM   information_schema.tables 
@@ -257,8 +278,6 @@ func MakeResourceSchema() {
 	}
 }
 
-// TODO: should probably return error -  not have os.Exit
-
 func DropResources() error {
 	db := GetPool()
 	ctx := context.Background()
@@ -300,7 +319,6 @@ func ClearAllResources() (err error) {
 	return nil
 }
 
-// TODO: should probably return error -  not have os.Exit
 func ClearResourceType(typeName string) (err error) {
 	db := GetPool()
 	ctx := context.Background()
@@ -336,8 +354,7 @@ func uniqueUri(idSlice []UriAddressable) []UriAddressable {
 	return list
 }
 
-// add many at a time (upsert) - don't need a makeUri function
-// (that's what's different from BulkAddResourcesStagingResource)
+// add many at a time (upsert) -
 // FIXME: a lot of boilerplate code exactly the same
 func BulkAddResources(typeName string, items ...UriAddressable) error {
 	var resources = make([]Resource, 0)
@@ -384,7 +401,6 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 
 	// supposedly no-op if everything okay
 	defer tx.Rollback(ctx)
-
 	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
 	  (uri text NOT NULL, type text NOT NULL, hash text NOT NULL,
 		data json NOT NULL, data_b jsonb NOT NULL,
@@ -460,13 +476,14 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	return nil
 }
 
-func BulkAddResourcesStagingResource(typeName string, uriMaker UriFunc, items ...StagingResource) error {
+func BulkMoveStagingToResources(typeName string, uriMaker UriFunc, items ...StagingResource) error {
 	var resources = make([]Resource, 0)
 	var err error
 	ctx := context.Background()
 
 	for _, item := range items {
 		str := item.Data
+		// need way to get URI (given a staging resource)
 		uri := uriMaker(item)
 
 		hash := makeHash(string(str))
@@ -610,7 +627,58 @@ func chunkedResources(resources []UriAddressable, chunkSize int) [][]UriAddressa
 	return divided
 }
 
-func BatchDeleteFromResources(resources []UriAddressable) (err error) {
+// get typename ??
+func BatchDeleteStagingFromResources(resources []StagingResource) (err error) {
+	db := GetPool()
+	ctx := context.Background()
+	chunked := chunkedStaging(resources, 500)
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	// noop if no problems
+	defer tx.Rollback(ctx)
+	for _, chunk := range chunked {
+		// how best to deal with chunked errors?
+		// cancel entire transaction?
+		err := batchDeleteStagingFromResources(ctx, chunk, tx)
+		if err != nil {
+			return err
+		}
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// how to enusure staging-resource IS identifiable
+func batchDeleteStagingFromResources(ctx context.Context, resources []StagingResource, tx pgx.Tx) (err error) {
+	var clauses = make([]string, 0)
+	for _, resource := range resources {
+		s := fmt.Sprintf("('%s', '%s')", resource.Id, resource.Type)
+		clauses = append(clauses, s)
+	}
+
+	inClause := strings.Join(clauses, ", ")
+
+	// TODO: not crazy about this ... but hoping for something that did
+	// not require anything specific in the json data
+	// could at least allow a param "idColumn" (would be 'id')
+	sql := fmt.Sprintf(`DELETE from resources WHERE (data_b->>'id', type) IN (
+		%s
+	)`, inClause)
+
+	_, err = tx.Exec(ctx, sql)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func BatchDeleteResourcesFromResources(resources []UriAddressable) (err error) {
 	db := GetPool()
 	ctx := context.Background()
 	chunked := chunkedResources(resources, 500)
@@ -623,7 +691,7 @@ func BatchDeleteFromResources(resources []UriAddressable) (err error) {
 	for _, chunk := range chunked {
 		// how best to deal with chunked errors?
 		// cancel entire transaction?
-		err := batchDeleteFromResources(chunk, tx)
+		err := batchDeleteResourcesFromResources(ctx, chunk, tx)
 		if err != nil {
 			return err
 		}
@@ -635,38 +703,23 @@ func BatchDeleteFromResources(resources []UriAddressable) (err error) {
 	return nil
 }
 
-func batchDeleteFromResources(resources []UriAddressable, tx pgx.Tx) (err error) {
-	// NOTE: this would need to only do 500-750 (or so) at a time
-	// because of SQL IN clause limit of 1000
-	//db := GetPool()
-	ctx := context.Background()
-	// TODO: better ways to do this
+func batchDeleteResourcesFromResources(ctx context.Context, resources []UriAddressable, tx pgx.Tx) (err error) {
 	var uris = make([]string, 0)
-
 	for _, resource := range resources {
 		s := fmt.Sprintf("'%s'", resource.Uri())
 		uris = append(uris, s)
 	}
-
 	inClause := strings.Join(uris, ", ")
 
 	sql := fmt.Sprintf(`DELETE from resources WHERE uri IN (
-		  %s
-		)`, inClause)
+		%s
+	)`, inClause)
 
-	//tx, err := db.Begin()
-	//if err != nil {
-	//	return err
-	//}
 	_, err = tx.Exec(ctx, sql)
 
 	if err != nil {
 		return err
 	}
-	//err = tx.Commit()
-	//if err != nil {
-	//	return err
-	//}
 	return nil
 }
 
@@ -680,18 +733,14 @@ func (uri UriOnly) Uri() string {
 	return uri.Fn(uri.Res)
 }
 
-func BulkRemoveDeletedResources(typeName string, uriMaker UriFunc) (err error) {
+func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
 	deletes := RetrieveDeletedStaging(typeName)
-	toRemove := []UriAddressable{}
-	for _, res := range deletes {
-		stub := UriOnly{Res: res, Fn: uriMaker}
-		toRemove = append(toRemove, stub)
-	}
-	err = BatchDeleteFromResources(toRemove)
+	fmt.Printf("should remove %d records\n", len(deletes))
+	err = BatchDeleteStagingFromResources(deletes)
 	if err != nil {
 		return err
 	}
-	// then remove from staging?  or let caller ?
+	// TODO: then remove from staging?  or let caller ?
 	// in theory could use to remove from solr, rdf etc...
 	// but could also use notify
 	// no errors - would catch later with 'orphan' check
@@ -702,26 +751,10 @@ func BulkRemoveDeletedResources(typeName string, uriMaker UriFunc) (err error) {
 	return nil
 }
 
-// TODO: maybe a more intuitive name - especially if this is the only
-// way to delete - like BulkDelete()
-func BulkDeleteResources(typeName string, uriMaker UriFunc, items ...Identifiable) error {
-	err := BulkAddStagingForDelete(typeName, items...)
-	if err != nil {
-		return err
-	}
-	err = BulkRemoveDeletedResources(typeName, uriMaker)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// TODO: different from above, but name overly similar
 func BulkRemoveResources(items ...UriAddressable) error {
 	// should it go to trouble of adding to staging as delete
-	// and then turn around and delete?  but then need
-	// the id-matcher (uriMaker)
-	err := BatchDeleteFromResources(items)
+	// and then turn around and delete?
+	err := BatchDeleteResourcesFromResources(items)
 	if err != nil {
 		return err
 	}
