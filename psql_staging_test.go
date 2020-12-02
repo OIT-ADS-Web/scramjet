@@ -60,9 +60,10 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// NOTE: for delete to work, json needs to be 'id' lowercase
 type TestPerson struct {
-	Id   string
-	Name string
+	Id   string `json:"id"`
+	Name string `json:"name"`
 }
 
 func (tp TestPerson) Identifier() string {

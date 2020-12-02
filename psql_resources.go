@@ -634,33 +634,8 @@ func chunkedResources(resources []UriAddressable, chunkSize int) [][]UriAddressa
 	return divided
 }
 
-func BatchDeleteFromResources(resources []UriAddressable) (err error) {
-	db := GetPool()
-	ctx := context.Background()
-	chunked := chunkedResources(resources, 500)
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	// noop if no problems
-	defer tx.Rollback(ctx)
-	for _, chunk := range chunked {
-		// how best to deal with chunked errors?
-		// cancel entire transaction?
-		err := batchDeleteFromResources(ctx, chunk, tx)
-		if err != nil {
-			return err
-		}
-	}
-	err = tx.Commit(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // get typename ??
-func BatchDeleteFromResources2(resources []StagingResource) (err error) {
+func BatchDeleteStagingFromResources(resources []StagingResource) (err error) {
 	db := GetPool()
 	ctx := context.Background()
 	chunked := chunkedStaging(resources, 500)
@@ -673,7 +648,7 @@ func BatchDeleteFromResources2(resources []StagingResource) (err error) {
 	for _, chunk := range chunked {
 		// how best to deal with chunked errors?
 		// cancel entire transaction?
-		err := batchDeleteFromResources2(ctx, chunk, tx)
+		err := batchDeleteStagingFromResources(ctx, chunk, tx)
 		if err != nil {
 			return err
 		}
@@ -685,44 +660,8 @@ func BatchDeleteFromResources2(resources []StagingResource) (err error) {
 	return nil
 }
 
-// TODO: lower, uppercase matching names maybe confusing
-func batchDeleteFromResources(ctx context.Context, resources []UriAddressable, tx pgx.Tx) (err error) {
-	// NOTE: this would need to only do 500-750 (or so) at a time
-	// because of SQL IN clause limit of 1000
-	//db := GetPool()
-	//ctx := context.Background()
-	// TODO: better ways to do this
-	var uris = make([]string, 0)
-
-	for _, resource := range resources {
-		s := fmt.Sprintf("'%s'", resource.Uri())
-		uris = append(uris, s)
-	}
-
-	inClause := strings.Join(uris, ", ")
-
-	sql := fmt.Sprintf(`DELETE from resources WHERE uri IN (
-		  %s
-		)`, inClause)
-
-	//tx, err := db.Begin()
-	//if err != nil {
-	//	return err
-	//}
-	_, err = tx.Exec(ctx, sql)
-
-	if err != nil {
-		return err
-	}
-	//err = tx.Commit()
-	//if err != nil {
-	//	return err
-	//}
-	return nil
-}
-
 // how to enusure staging-resource IS identifiable
-func batchDeleteFromResources2(ctx context.Context, resources []StagingResource, tx pgx.Tx) (err error) {
+func batchDeleteStagingFromResources(ctx context.Context, resources []StagingResource, tx pgx.Tx) (err error) {
 	//ctx := context.Background()
 	// TODO: better ways to do this
 	//var uris = make([]string, 0)
@@ -757,6 +696,51 @@ func batchDeleteFromResources2(ctx context.Context, resources []StagingResource,
 	return nil
 }
 
+func BatchDeleteResourcesFromResources(resources []UriAddressable) (err error) {
+	db := GetPool()
+	ctx := context.Background()
+	chunked := chunkedResources(resources, 500)
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	// noop if no problems
+	defer tx.Rollback(ctx)
+	for _, chunk := range chunked {
+		// how best to deal with chunked errors?
+		// cancel entire transaction?
+		err := batchDeleteResourcesFromResources(ctx, chunk, tx)
+		if err != nil {
+			return err
+		}
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func batchDeleteResourcesFromResources(ctx context.Context, resources []UriAddressable, tx pgx.Tx) (err error) {
+	var uris = make([]string, 0)
+	for _, resource := range resources {
+		s := fmt.Sprintf("'%s'", resource.Uri())
+		uris = append(uris, s)
+	}
+	inClause := strings.Join(uris, ", ")
+
+	sql := fmt.Sprintf(`DELETE from resources WHERE uri IN (
+		%s
+	)`, inClause)
+
+	_, err = tx.Exec(ctx, sql)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // just a stub - so I can match staging to resource table
 type UriOnly struct {
 	Fn  UriFunc
@@ -767,30 +751,7 @@ func (uri UriOnly) Uri() string {
 	return uri.Fn(uri.Res)
 }
 
-func BulkRemoveDeletedResources(typeName string, uriMaker UriFunc) (err error) {
-	deletes := RetrieveDeletedStaging(typeName)
-	toRemove := []UriAddressable{}
-	for _, res := range deletes {
-		stub := UriOnly{Res: res, Fn: uriMaker}
-		toRemove = append(toRemove, stub)
-	}
-	err = BatchDeleteFromResources(toRemove)
-	// err = BatchDeleteFromResources2(deletes)
-	if err != nil {
-		return err
-	}
-	// then remove from staging?  or let caller ?
-	// in theory could use to remove from solr, rdf etc...
-	// but could also use notify
-	// no errors - would catch later with 'orphan' check
-	err = ClearStagingTypeDeletes(typeName)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func BulkRemoveDeletedResources2(typeName string) (err error) {
+func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
 	deletes := RetrieveDeletedStaging(typeName)
 	//toRemove := []UriAddressable{}
 	//for _, res := range deletes {
@@ -798,7 +759,8 @@ func BulkRemoveDeletedResources2(typeName string) (err error) {
 	//	toRemove = append(toRemove, stub)
 	//}
 	//err = BatchDeleteFromResources(toRemove)
-	err = BatchDeleteFromResources2(deletes)
+	fmt.Printf("should remove %d records\n", len(deletes))
+	err = BatchDeleteStagingFromResources(deletes)
 	if err != nil {
 		return err
 	}
@@ -813,26 +775,11 @@ func BulkRemoveDeletedResources2(typeName string) (err error) {
 	return nil
 }
 
-// TODO: maybe a more intuitive name - especially if this is the only
-// way to delete - like BulkDelete()
-func BulkDeleteResources(typeName string, uriMaker UriFunc, items ...Identifiable) error {
-	err := BulkAddStagingForDelete(typeName, items...)
-	if err != nil {
-		return err
-	}
-	err = BulkRemoveDeletedResources(typeName, uriMaker)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// TODO: different from above, but name overly similar
 func BulkRemoveResources(items ...UriAddressable) error {
 	// should it go to trouble of adding to staging as delete
 	// and then turn around and delete?  but then need
 	// the id-matcher (uriMaker)
-	err := BatchDeleteFromResources(items)
+	err := BatchDeleteResourcesFromResources(items)
 	if err != nil {
 		return err
 	}

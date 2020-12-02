@@ -178,13 +178,17 @@ func TestBatchDeleteResources(t *testing.T) {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
 	// now turn around and mark for delete
-	sj.BatchMarkDeleteInStaging(valid)
+	err = sj.BatchMarkDeleteInStaging(valid)
+	if err != nil {
+		t.Error("error marking records valid")
+	}
 
 	// then delete
-	uriMaker := func(res sj.StagingResource) string {
-		return fmt.Sprintf("https://scholars.duke.edu/individual/%s", res.Id)
-	}
-	err = sj.BulkRemoveDeletedResources(typeName, uriMaker)
+	//uriMaker := func(res sj.StagingResource) string {
+	//	return fmt.Sprintf("https://scholars.duke.edu/individual/%s", res.Id)
+	//}
+	//err = sj.BulkRemoveStagingDeletedFromResources(typeName, uriMaker)
+	err = sj.BulkRemoveStagingDeletedFromResources(typeName)
 	if err != nil {
 		fmt.Println("could not mark for delete")
 		t.Errorf("err=%v\n", err)
@@ -239,7 +243,9 @@ func TestDeleteResource(t *testing.T) {
 	if deleteCount == 0 {
 		t.Error("after after adding to deletes, no deletes in table")
 	}
-	err = sj.BulkRemoveDeletedResources(typeName, uriMaker)
+	//err = sj.BulkRemoveStagingDeletedFromResources(typeName, uriMaker)
+	err = sj.BulkRemoveStagingDeletedFromResources(typeName)
+
 	if err != nil {
 		t.Errorf("unable to delete from resources:%s", err)
 	}
