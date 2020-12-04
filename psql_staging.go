@@ -1,15 +1,12 @@
 package staging_importer
 
 import (
-	//"context"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
-
-	//"github.com/jackc/pgx"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
@@ -27,13 +24,6 @@ type StagingResource struct {
 // kind of like dual primary key
 func (res StagingResource) Identifier() Identifier {
 	return Identifier{res.Id, res.Type}
-}
-
-// NOTE: this satisfies interface, but might not actually use
-func (res StagingResource) Object() interface{} {
-	// TODO: what to return here?
-	var obj interface{}
-	return json.Unmarshal(res.Data, obj)
 }
 
 // Staging ...
@@ -74,6 +64,7 @@ func RetrieveTypeStaging(typeName string) []StagingResource {
 func RetrieveValidStaging(typeName string) []StagingResource {
 	db := GetPool()
 	ctx := context.Background()
+	//resources := []Storeable{}
 	resources := []StagingResource{}
 
 	// NOTE: this does *not* filter by is_valid so we can try
@@ -141,14 +132,15 @@ func RetrieveInvalidStaging(typeName string) []StagingResource {
 	return resources
 }
 
+/*
 func ListTypeStaging(typeName string, validator ValidatorFunc) {
 	db := GetPool()
 	ctx := context.Background()
 	resources := []StagingResource{}
 
 	// find ones not already marked invalid ?
-	sql := `SELECT id, type, data 
-	FROM staging 
+	sql := `SELECT id, type, data
+	FROM staging
 	WHERE type = $1
 	AND is_valid != FALSE
 	`
@@ -177,6 +169,7 @@ func ListTypeStaging(typeName string, validator ValidatorFunc) {
 		log.Fatalln(err)
 	}
 }
+*/
 
 // NOTE: this needs a 'typeName' param because it assumes validator
 // is different per type
@@ -228,7 +221,7 @@ func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]Identifiable
 	return results, rejects
 }
 
-func StashStaging(docs ...Identifiable) error {
+func StashStaging(docs ...Storeable) error {
 	err := BulkAddStaging(docs...)
 	return err
 }
@@ -306,7 +299,7 @@ func batchMarkInvalidInStaging(resources []Identifiable) (err error) {
 
 // TODO: should probably batch these when validating and
 // mark valid, invalid in groups of 500 or something
-func MarkInvalidInStaging(res Identifiable) (err error) {
+func MarkInvalidInStaging(res Storeable) (err error) {
 	db := GetPool()
 	ctx := context.Background()
 	tx, err := db.Begin(ctx)
@@ -364,7 +357,10 @@ func chunked(resources []Identifiable, chunkSize int) [][]Identifiable {
 func BatchMarkValidInStaging(resources []Identifiable) {
 	chunked := chunked(resources, 500)
 	for _, chunk := range chunked {
-		batchMarkValidInStaging(chunk)
+		err := batchMarkValidInStaging(chunk)
+		if err != nil {
+			log.Fatalf("could not break list into chunks %v", err)
+		}
 	}
 }
 
@@ -637,7 +633,7 @@ func AddStagingResource(obj interface{}, id string, typeName string) (err error)
 }
 
 // need for this function?
-func SaveStagingResource(obj Identifiable) (err error) {
+func SaveStagingResource(obj Storeable) (err error) {
 	db := GetPool()
 	ctx := context.Background()
 	str, err := json.Marshal(obj.Object())
@@ -779,13 +775,24 @@ func unique(idSlice []Identifiable) []Identifiable {
 	return list
 }
 
-// don't actually need 'typeName' (it's in Identifiable)
-func BulkAddStaging(items ...Identifiable) error {
+func uniqueObjects(idSlice []Storeable) []Storeable {
+	keys := make(map[Identifier]bool)
+	list := []Storeable{}
+	for _, entry := range idSlice {
+		if _, value := keys[entry.Identifier()]; !value {
+			keys[entry.Identifier()] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+
+func BulkAddStaging(items ...Storeable) error {
 	var resources = make([]StagingResource, 0)
 	var err error
 	ctx := context.Background()
 	// NOTE: not sure if these are necessary
-	list := unique(items)
+	list := uniqueObjects(items)
 
 	for _, item := range list {
 		str, err := json.Marshal(item.Object())
@@ -904,55 +911,6 @@ func BulkAddStagingResources(resources ...StagingResource) error {
 	return nil
 }
 
-func BatchMarkDeleteInStaging(resources []Identifiable) (err error) {
-	db := GetPool()
-	ctx := context.Background()
-
-	chunked := chunked(resources, 500)
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	// noop if no problems
-	defer tx.Rollback(ctx)
-	for _, chunk := range chunked {
-		// how to deal with chunked error?
-		err := batchMarkDeleteInStaging(chunk, tx)
-		if err != nil {
-			return err
-		}
-	}
-	err = tx.Commit(ctx)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func batchMarkDeleteInStaging(resources []Identifiable, tx pgx.Tx) (err error) {
-	ctx := context.Background()
-	// TODO: better ways to do this
-	var clauses = make([]string, 0)
-
-	for _, resource := range resources {
-		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
-		clauses = append(clauses, s)
-	}
-
-	inClause := strings.Join(clauses, ", ")
-
-	sql := fmt.Sprintf(`UPDATE staging set to_delete = TRUE WHERE (id, type) IN (
-		  %s
-		)`, inClause)
-	_, err = tx.Exec(ctx, sql)
-
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func RetrieveDeletedStaging(typeName string) []Identifiable {
 	db := GetPool()
 	ctx := context.Background()
@@ -994,16 +952,9 @@ func BulkAddStagingForDelete(items ...Identifiable) error {
 	list := unique(items)
 
 	for _, item := range list {
-		str, err := json.Marshal(item)
-		if err != nil {
-			// return? or let continue loop
-			continue
-		}
-		// NOTE: data (str) will be largely empty - this is just a delete flag
-		//res := &StagingResource{Id: item.Identifier(), Type: typeName, Data: str}
-		//resources = append(resources, item)
-
-		res := StagingResource{Id: item.Identifier().Id, Type: item.Identifier().Type, Data: str}
+		// NOTE: json cannot be blank - so passing through 'blank' json
+		blank := []byte(`{}`)
+		res := StagingResource{Id: item.Identifier().Id, Type: item.Identifier().Type, Data: blank}
 		//resources = append(resources, item)
 		resources = append(resources, res)
 	}

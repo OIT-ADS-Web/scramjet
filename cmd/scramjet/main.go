@@ -103,7 +103,7 @@ func IntakeHandler(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	resources := []sj.Identifiable{}
+	resources := []sj.Storeable{}
 	for _, res := range arr {
 		// NOTE: category might be 'type' in object already
 		res.Id = sj.Identifier{Id: res.Identifier().Id, Type: vars["category"]}

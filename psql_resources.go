@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	//"github.com/jackc/pgx"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
@@ -30,13 +29,8 @@ type Resource struct {
 	UpdatedAt time.Time    `db:"updated_at"`
 }
 
-func (res Resource) Identifier() string {
-	// NOTE: will change this to be id
-	return res.Uri
-}
-
-func (res Resource) Grouping() string {
-	return res.Type
+func (res Resource) Identifier() Identifier {
+	return Identifier{res.Uri, res.Type}
 }
 
 // TODO: could just send in date - leave it up to library user
@@ -121,33 +115,39 @@ func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error
 //https://stackoverflow.com/questions/2377881/how-to-get-a-md5-hash-from-a-string-in-golang
 func makeHash(text string) string {
 	hasher := md5.New()
-	hasher.Write([]byte(text))
+	_, err := hasher.Write([]byte(text))
+	if err != nil {
+		// TODO: right thing to do here?
+		log.Fatalln(err)
+	}
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
 // only does one at a time (not typically used)
-func SaveResource(obj StagingResource) (err error) {
+func SaveResource(obj Storeable) (err error) {
 	ctx := context.Background()
-	//str, err := json.Marshal(obj)
+	str, err := json.Marshal(obj.Object())
 
-	//if err != nil {
-	//	log.Fatalln(err)
-	//	return err
-	//}
+	if err != nil {
+		log.Fatalln(err)
+		return err
+	}
 
 	db := GetPool()
 
-	hash := makeHash(string(obj.Data))
+	hash := makeHash(string(str))
 
 	found := Resource{}
 	var data pgtype.JSON
 	var dataB pgtype.JSONB
-	err = data.Set(obj.Data)
+	//err = data.Set(obj.Data)
+	err = data.Set(str)
 
 	if err != nil {
 		return err
 	}
-	err = dataB.Set(obj.Data)
+	//err = dataB.Set(obj.Data)
+	err = dataB.Set(str)
 	if err != nil {
 		return err
 	}
@@ -330,11 +330,11 @@ func ClearResourceType(typeName string) (err error) {
 
 // add many at a time (upsert) -
 // FIXME: a lot of boilerplate code exactly the same
-func BulkAddResources(items ...Identifiable) error {
+func BulkAddResources(items ...Storeable) error {
 	var resources = make([]Resource, 0)
 	var err error
 	// NOTE: not sure if these are necessary
-	list := unique(items)
+	list := uniqueObjects(items)
 
 	for _, item := range list {
 		str, err := json.Marshal(item.Object())
@@ -451,29 +451,23 @@ func BulkAddResources(items ...Identifiable) error {
 }
 
 // NOTE: only need 'typeName' param for clearing out from staging
-func BulkMoveStagingTypeToResources(typeName string, items ...Identifiable) error {
+func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) error {
 	var resources = make([]Resource, 0)
 	var err error
 	ctx := context.Background()
 
 	for _, item := range items {
-		str, err := json.Marshal(item.Object())
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		hash := makeHash(string(str))
+		hash := makeHash(string(item.Data))
 
 		var data pgtype.JSON
 		var dataB pgtype.JSONB
-		err = data.Set(str)
+		err = data.Set(item.Data)
 
 		if err != nil {
 			return err
 		}
 
-		// same value - is that a problem?
-		err = dataB.Set(str)
+		err = dataB.Set(item.Data)
 
 		if err != nil {
 			return err
@@ -630,6 +624,7 @@ func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiab
 		%s
 	)`, inClause)
 
+	//fmt.Printf("runnign sql:%s\n", sql)
 	_, err = tx.Exec(ctx, sql)
 
 	if err != nil {
@@ -685,7 +680,6 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifi
 
 func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
 	deletes := RetrieveDeletedStaging(typeName)
-	fmt.Printf("should remove %d records\n", len(deletes))
 	err = BatchDeleteStagingFromResources(deletes)
 	if err != nil {
 		return err

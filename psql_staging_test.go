@@ -152,7 +152,7 @@ func TestBulkAdd(t *testing.T) {
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
 	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
 	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
-	people := []sj.Identifiable{pass1, pass2}
+	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.BulkAddStaging(people...)
 
@@ -180,7 +180,7 @@ func TestTypicalUsage(t *testing.T) {
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
 	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
 	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
-	people := []sj.Identifiable{pass1, pass2}
+	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.StashStaging(people...)
 
@@ -208,7 +208,7 @@ func TestBatchValid(t *testing.T) {
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
 	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
 	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
-	people := []sj.Identifiable{pass1, pass2}
+	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.StashStaging(people...)
 
@@ -239,7 +239,7 @@ func TestBatchInValid(t *testing.T) {
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
 	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
 	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
-	people := []sj.Identifiable{pass1, pass2}
+	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.StashStaging(people...)
 
@@ -271,7 +271,7 @@ func TestBatchMarkDelete(t *testing.T) {
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
 	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
 	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
-	people := []sj.Identifiable{pass1, pass2}
+	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.StashStaging(people...)
 
@@ -284,7 +284,8 @@ func TestBatchMarkDelete(t *testing.T) {
 	// should be no rejects
 
 	// NOTE: just immediately marking for delete
-	err = sj.BatchMarkDeleteInStaging(valid)
+	err = sj.BulkAddStagingForDelete(valid...)
+
 	if err != nil {
 		fmt.Println("could not mark for delete")
 		t.Errorf("err=%v\n", err)
