@@ -1,15 +1,12 @@
 package staging_importer
 
 import (
-	//"context"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
-
-	//"github.com/jackc/pgx"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
@@ -24,8 +21,9 @@ type StagingResource struct {
 	ToDelete sql.NullBool `db:"to_delete"`
 }
 
-func (res StagingResource) Identifier() string {
-	return res.Id
+// kind of like dual primary key
+func (res StagingResource) Identifier() Identifier {
+	return Identifier{res.Id, res.Type}
 }
 
 // Staging ...
@@ -66,6 +64,7 @@ func RetrieveTypeStaging(typeName string) []StagingResource {
 func RetrieveValidStaging(typeName string) []StagingResource {
 	db := GetPool()
 	ctx := context.Background()
+	//resources := []Storeable{}
 	resources := []StagingResource{}
 
 	// NOTE: this does *not* filter by is_valid so we can try
@@ -133,14 +132,15 @@ func RetrieveInvalidStaging(typeName string) []StagingResource {
 	return resources
 }
 
+/*
 func ListTypeStaging(typeName string, validator ValidatorFunc) {
 	db := GetPool()
 	ctx := context.Background()
 	resources := []StagingResource{}
 
 	// find ones not already marked invalid ?
-	sql := `SELECT id, type, data 
-	FROM staging 
+	sql := `SELECT id, type, data
+	FROM staging
 	WHERE type = $1
 	AND is_valid != FALSE
 	`
@@ -169,14 +169,17 @@ func ListTypeStaging(typeName string, validator ValidatorFunc) {
 		log.Fatalln(err)
 	}
 }
+*/
 
-func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]StagingResource, []StagingResource) {
+// NOTE: this needs a 'typeName' param because it assumes validator
+// is different per type
+func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]Identifiable, []Identifiable) {
 	db := GetPool()
 	ctx := context.Background()
 	resources := []StagingResource{}
 
-	var results = make([]StagingResource, 0)
-	var rejects = make([]StagingResource, 0)
+	var results = make([]Identifiable, 0)
+	var rejects = make([]Identifiable, 0)
 
 	// find ones not already marked invalid ?
 	sql := `SELECT id, type, data 
@@ -218,8 +221,8 @@ func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]StagingResou
 	return results, rejects
 }
 
-func StashTypeStaging(typeName string, docs ...Identifiable) error {
-	err := BulkAddStaging(typeName, docs...)
+func StashStaging(docs ...Storeable) error {
+	err := BulkAddStaging(docs...)
 	return err
 }
 
@@ -249,15 +252,15 @@ func RetrieveSingleStaging(id string, typeName string) StagingResource {
 	return found
 }
 
-func BatchMarkInvalidInStaging(resources []StagingResource) {
-	chunked := chunkedStaging(resources, 500)
+func BatchMarkInvalidInStaging(resources []Identifiable) {
+	chunked := chunked(resources, 500)
 	for _, chunk := range chunked {
 		batchMarkInvalidInStaging(chunk)
 	}
 }
 
 // made lowercase same name to not export
-func batchMarkInvalidInStaging(resources []StagingResource) (err error) {
+func batchMarkInvalidInStaging(resources []Identifiable) (err error) {
 	// NOTE: this would need to only do 500 at a time
 	// because of SQL IN clause limit
 	db := GetPool()
@@ -267,7 +270,7 @@ func batchMarkInvalidInStaging(resources []StagingResource) (err error) {
 	var clauses = make([]string, 0)
 
 	for _, resource := range resources {
-		s := fmt.Sprintf("('%s', '%s')", resource.Id, resource.Type)
+		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
 		clauses = append(clauses, s)
 	}
 
@@ -296,7 +299,7 @@ func batchMarkInvalidInStaging(resources []StagingResource) (err error) {
 
 // TODO: should probably batch these when validating and
 // mark valid, invalid in groups of 500 or something
-func MarkInvalidInStaging(res StagingResource) (err error) {
+func MarkInvalidInStaging(res Storeable) (err error) {
 	db := GetPool()
 	ctx := context.Background()
 	tx, err := db.Begin(ctx)
@@ -309,7 +312,7 @@ func MarkInvalidInStaging(res StagingResource) (err error) {
 	  set is_valid = FALSE
 		WHERE id = $1 and type = $2`
 
-	_, err = tx.Exec(ctx, sql, res.Id, res.Type)
+	_, err = tx.Exec(ctx, sql, res.Identifier().Id, res.Identifier().Type)
 	if err != nil {
 		return err
 	}
@@ -320,6 +323,7 @@ func MarkInvalidInStaging(res StagingResource) (err error) {
 }
 
 //https://stackoverflow.com/questions/35179656/slice-chunking-in-go
+/*
 func chunkedStaging(resources []StagingResource, chunkSize int) [][]StagingResource {
 	var divided [][]StagingResource
 
@@ -334,16 +338,33 @@ func chunkedStaging(resources []StagingResource, chunkSize int) [][]StagingResou
 	}
 	return divided
 }
+*/
+func chunked(resources []Identifiable, chunkSize int) [][]Identifiable {
+	var divided [][]Identifiable
 
-func BatchMarkValidInStaging(resources []StagingResource) {
-	chunked := chunkedStaging(resources, 500)
+	for i := 0; i < len(resources); i += chunkSize {
+		end := i + chunkSize
+
+		if end > len(resources) {
+			end = len(resources)
+		}
+
+		divided = append(divided, resources[i:end])
+	}
+	return divided
+}
+
+func BatchMarkValidInStaging(resources []Identifiable) {
+	chunked := chunked(resources, 500)
 	for _, chunk := range chunked {
-		batchMarkValidInStaging(chunk)
+		err := batchMarkValidInStaging(chunk)
+		if err != nil {
+			log.Fatalf("could not break list into chunks %v", err)
+		}
 	}
 }
 
-// okay to just not export?
-func batchMarkValidInStaging(resources []StagingResource) (err error) {
+func batchMarkValidInStaging(resources []Identifiable) (err error) {
 	// NOTE: this would need to only do 500-750 (or so) at a time
 	// because of SQL IN clause limit of 1000
 	db := GetPool()
@@ -352,7 +373,7 @@ func batchMarkValidInStaging(resources []StagingResource) (err error) {
 	var clauses = make([]string, 0)
 
 	for _, resource := range resources {
-		s := fmt.Sprintf("('%s', '%s')", resource.Id, resource.Type)
+		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
 		clauses = append(clauses, s)
 	}
 
@@ -611,21 +632,22 @@ func AddStagingResource(obj interface{}, id string, typeName string) (err error)
 	return nil
 }
 
-func SaveStagingResource(obj Identifiable, typeName string) (err error) {
+// need for this function?
+func SaveStagingResource(obj Storeable) (err error) {
 	db := GetPool()
 	ctx := context.Background()
-	str, err := json.Marshal(obj)
-	if err != nil {
-		return err
-	}
+	str, err := json.Marshal(obj.Object())
+	//if err != nil {
+	//	return err
+	//}
 
 	//var found StagingResource
-	res := &StagingResource{Id: obj.Identifier(), Type: typeName, Data: str}
+	//res := &StagingResource{Id: obj.Identifier(), Type: typeName, Data: str}
 
 	findSql := `SELECT id FROM staging
 	  WHERE (id = $1 AND type = $2)`
 
-	row := db.QueryRow(ctx, findSql, obj.Identifier(), typeName)
+	row := db.QueryRow(ctx, findSql, obj.Identifier().Id, obj.Identifier().Type)
 
 	// NOTE: can't scan into structs
 	var foundId string
@@ -639,23 +661,28 @@ func SaveStagingResource(obj Identifiable, typeName string) (err error) {
 	// supposedly no-op if no problems
 	defer tx.Rollback(ctx)
 
-	// e.g. if not found???
+	//str, err := json.Marshal(obj.Object())
+	//if err != nil {
+	// return? or let continue loop
+	//	continue
+	//}
+
 	if notFoundError != nil {
-		sql := `INSERT INTO staging (id, type, data) 
+		sql := `INSERT INTO staging (id, type, data)
 	      VALUES ($1, $2, $3)`
-		_, err := tx.Exec(ctx, sql, res.Id, res.Type, res.Data)
+		_, err := tx.Exec(ctx, sql, obj.Identifier().Id, obj.Identifier().Type, str)
 
 		if err != nil {
 			return err
 		}
 	} else {
 		sql := `UPDATE staging
-	  set id = $1, 
-		type = $2, 
+	  set id = $1,
+		type = $2,
 		data = $3,
 		is_valid = null
 		WHERE id = $1 and type = $2`
-		_, err = tx.Exec(ctx, sql, res.Id, res.Type, res.Data)
+		_, err = tx.Exec(ctx, sql, obj.Identifier().Id, obj.Identifier().Type, str)
 
 		if err != nil {
 			return err
@@ -721,13 +748,13 @@ func SaveStagingResourceDirect(res StagingResource, typeName string) (err error)
 }
 
 // returns false if error - maybe should not
-func StagingResourceExists(uri string, typeName string) bool {
+func StagingResourceExists(id string, typeName string) bool {
 	var exists bool
 	db := GetPool()
 	ctx := context.Background()
 
 	sqlExists := `SELECT EXISTS (SELECT id FROM staging where (id = $1 AND type =$2))`
-	err := db.QueryRow(ctx, sqlExists, uri, typeName).Scan(&exists)
+	err := db.QueryRow(ctx, sqlExists, id, typeName).Scan(&exists)
 	if err != nil {
 		return false
 	}
@@ -737,7 +764,7 @@ func StagingResourceExists(uri string, typeName string) bool {
 // stole code from here:
 //https://stackoverflow.com/questions/12486436/
 func unique(idSlice []Identifiable) []Identifiable {
-	keys := make(map[string]bool)
+	keys := make(map[Identifier]bool)
 	list := []Identifiable{}
 	for _, entry := range idSlice {
 		if _, value := keys[entry.Identifier()]; !value {
@@ -748,21 +775,34 @@ func unique(idSlice []Identifiable) []Identifiable {
 	return list
 }
 
-func BulkAddStaging(typeName string, items ...Identifiable) error {
+func uniqueObjects(idSlice []Storeable) []Storeable {
+	keys := make(map[Identifier]bool)
+	list := []Storeable{}
+	for _, entry := range idSlice {
+		if _, value := keys[entry.Identifier()]; !value {
+			keys[entry.Identifier()] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+
+func BulkAddStaging(items ...Storeable) error {
 	var resources = make([]StagingResource, 0)
 	var err error
 	ctx := context.Background()
 	// NOTE: not sure if these are necessary
-	list := unique(items)
+	list := uniqueObjects(items)
 
 	for _, item := range list {
-		str, err := json.Marshal(item)
+		str, err := json.Marshal(item.Object())
 		if err != nil {
 			// return? or let continue loop
 			continue
 		}
-		res := &StagingResource{Id: item.Identifier(), Type: typeName, Data: str}
-		resources = append(resources, *res)
+		res := StagingResource{Id: item.Identifier().Id, Type: item.Identifier().Type, Data: str}
+		//resources = append(resources, item)
+		resources = append(resources, res)
 	}
 
 	db := GetPool()
@@ -817,7 +857,7 @@ func BulkAddStaging(typeName string, items ...Identifiable) error {
 	return nil
 }
 
-func BulkAddStagingResources(typeName string, resources ...StagingResource) error {
+func BulkAddStagingResources(resources ...StagingResource) error {
 	db := GetPool()
 	ctx := context.Background()
 	tx, err := db.Begin(ctx)
@@ -871,59 +911,10 @@ func BulkAddStagingResources(typeName string, resources ...StagingResource) erro
 	return nil
 }
 
-func BatchMarkDeleteInStaging(resources []StagingResource) (err error) {
+func RetrieveDeletedStaging(typeName string) []Identifiable {
 	db := GetPool()
 	ctx := context.Background()
-
-	chunked := chunkedStaging(resources, 500)
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	// noop if no problems
-	defer tx.Rollback(ctx)
-	for _, chunk := range chunked {
-		// how to deal with chunked error?
-		err := batchMarkDeleteInStaging(chunk, tx)
-		if err != nil {
-			return err
-		}
-	}
-	err = tx.Commit(ctx)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func batchMarkDeleteInStaging(resources []StagingResource, tx pgx.Tx) (err error) {
-	ctx := context.Background()
-	// TODO: better ways to do this
-	var clauses = make([]string, 0)
-
-	for _, resource := range resources {
-		s := fmt.Sprintf("('%s', '%s')", resource.Id, resource.Type)
-		clauses = append(clauses, s)
-	}
-
-	inClause := strings.Join(clauses, ", ")
-
-	sql := fmt.Sprintf(`UPDATE staging set to_delete = TRUE WHERE (id, type) IN (
-		  %s
-		)`, inClause)
-	_, err = tx.Exec(ctx, sql)
-
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func RetrieveDeletedStaging(typeName string) []StagingResource {
-	db := GetPool()
-	ctx := context.Background()
-	resources := []StagingResource{}
+	resources := []Identifiable{}
 
 	sql := `SELECT id, type, data 
 	FROM staging 
@@ -953,7 +944,7 @@ func RetrieveDeletedStaging(typeName string) []StagingResource {
 	return resources
 }
 
-func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
+func BulkAddStagingForDelete(items ...Identifiable) error {
 	var resources = make([]StagingResource, 0)
 	var err error
 	ctx := context.Background()
@@ -961,14 +952,11 @@ func BulkAddStagingForDelete(typeName string, items ...Identifiable) error {
 	list := unique(items)
 
 	for _, item := range list {
-		str, err := json.Marshal(item)
-		if err != nil {
-			// return? or let continue loop
-			continue
-		}
-		// NOTE: data (str) will be largely empty - this is just a delete flag
-		res := &StagingResource{Id: item.Identifier(), Type: typeName, Data: str}
-		resources = append(resources, *res)
+		// NOTE: json cannot be blank - so passing through 'blank' json
+		blank := []byte(`{}`)
+		res := StagingResource{Id: item.Identifier().Id, Type: item.Identifier().Type, Data: blank}
+		//resources = append(resources, item)
+		resources = append(resources, res)
 	}
 
 	db := GetPool()

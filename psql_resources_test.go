@@ -1,24 +1,11 @@
 package staging_importer_test
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"testing"
 
 	sj "gitlab.oit.duke.edu/scholars/staging_importer"
 )
-
-// each usage would need it's own implementation of this
-// maybe make it a type-mapper object of some sort
-// and able to pass in to processor?
-func makeStub(typeName string) (sj.UriAddressable, error) {
-	switch typeName {
-	case "person":
-		return &TestPerson{}, nil
-	}
-	return nil, errors.New("No match")
-}
 
 func TestResourcesIngest(t *testing.T) {
 	// NOTE: this is kind of re-hash of test in staging_test
@@ -28,9 +15,11 @@ func TestResourcesIngest(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	people := []sj.Storeable{pass1, pass2}
 
-	people := []sj.Identifiable{person1, person2}
-	err := sj.StashTypeStaging(typeName, people...)
+	err := sj.StashStaging(people...)
 
 	if err != nil {
 		fmt.Println("could not save")
@@ -44,24 +33,11 @@ func TestResourcesIngest(t *testing.T) {
 	// into resources table
 	sj.BatchMarkValidInStaging(valid)
 	list := sj.RetrieveValidStaging(typeName)
+	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
-	// now take that list and move to resources
-	for _, res := range list {
-		per, err := makeStub(typeName)
-		if err != nil {
-			t.Error("error making struct")
-		}
-		err = json.Unmarshal(res.Data, per)
-		if err != nil {
-			t.Error("error unmarshalling json")
-		}
-		// one at a time
-		err = sj.SaveResource(per, typeName)
-		if err != nil {
-			t.Error("error saving record")
-		}
+	if err != nil {
+		t.Error("error moving to resource table")
 	}
-
 	// TODO: need a better way to limit to updates
 	err, stashed := sj.RetrieveTypeResources(typeName)
 	if err != nil {
@@ -81,9 +57,11 @@ func TestBatchResources(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	people := []sj.Storeable{pass1, pass2}
 
-	people := []sj.Identifiable{person1, person2}
-	err := sj.StashTypeStaging(typeName, people...)
+	err := sj.StashStaging(people...)
 
 	if err != nil {
 		t.Errorf("err=%v\n", err)
@@ -98,23 +76,8 @@ func TestBatchResources(t *testing.T) {
 	// should be two marked as 'valid' now
 
 	list := sj.RetrieveValidStaging(typeName)
+	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
-	resources := []sj.UriAddressable{}
-	for _, res := range list {
-		// e.g. convert Identifiable to UriAddressable
-		per, err := makeStub(typeName)
-		if err != nil {
-			t.Error("error making struct")
-		}
-		err = json.Unmarshal(res.Data, per)
-		if err != nil {
-			t.Error("error unmarshalling json")
-		}
-		t.Logf("person made =%v\n", per.Uri())
-		resources = append(resources, per)
-	}
-
-	err = sj.BulkAddResources(typeName, resources...)
 	// false = not updates only
 	err, existing := sj.RetrieveTypeResources(typeName)
 	if err != nil {
@@ -127,15 +90,23 @@ func TestBatchResources(t *testing.T) {
 
 func TestBatchDeleteResources(t *testing.T) {
 	// clear out staging here
-	sj.ClearAllStaging()
-	sj.ClearAllResources()
+	err := sj.ClearAllStaging()
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+	err = sj.ClearAllResources()
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
 	typeName := "person"
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	people := []sj.Storeable{pass1, pass2}
 
-	people := []sj.Identifiable{person1, person2}
-	err := sj.StashTypeStaging(typeName, people...)
+	err = sj.StashStaging(people...)
 
 	if err != nil {
 		t.Errorf("err=%v\n", err)
@@ -150,23 +121,12 @@ func TestBatchDeleteResources(t *testing.T) {
 	// should be two marked as 'valid' now
 
 	list := sj.RetrieveValidStaging(typeName)
-
-	resources := []sj.UriAddressable{}
-	for _, res := range list {
-		// e.g. convert Identifiable to UriAddressable
-		per, err := makeStub(typeName)
-		if err != nil {
-			t.Error("error making struct")
-		}
-		err = json.Unmarshal(res.Data, per)
-		if err != nil {
-			t.Error("error unmarshalling json")
-		}
-		t.Logf("person made =%v\n", per.Uri())
-		resources = append(resources, per)
+	if len(valid) != 2 {
+		t.Error("did not retrieve 2 and only 2 record")
 	}
+	// NOTE: this clears staging table
+	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
-	err = sj.BulkAddResources(typeName, resources...)
 	// make sure they made it to begin with
 	err, existing := sj.RetrieveTypeResources(typeName)
 	if err != nil {
@@ -176,22 +136,30 @@ func TestBatchDeleteResources(t *testing.T) {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
 	// now turn around and mark for delete
-	err = sj.BatchMarkDeleteInStaging(valid)
+	err = sj.BulkAddStagingForDelete(valid...)
+
 	if err != nil {
 		t.Error("error marking records valid")
+	}
+
+	deletes := sj.RetrieveDeletedStaging(typeName)
+	//fmt.Printf("should remove %d records of type %s\n", len(deletes), typeName)
+	if len(deletes) != 2 {
+		t.Error("did not mark 2 records for delete")
 	}
 
 	// then delete
 	err = sj.BulkRemoveStagingDeletedFromResources(typeName)
 	if err != nil {
-		fmt.Println("could not mark for delete")
-		t.Errorf("err=%v\n", err)
+		//fmt.Println("could not mark for delete")
+		t.Errorf("could not mark for delete;err=%v\n", err)
 	}
 	err, existing = sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error retrieving record")
 	}
 	if len(existing) != 0 {
+		//fmt.Printf("%#v\n", existing)
 		t.Error("after delete, should not be any records")
 	}
 }
@@ -202,8 +170,10 @@ func TestDeleteResource(t *testing.T) {
 	typeName := "person"
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
-	people := []sj.Identifiable{person1}
-	err := sj.StashTypeStaging(typeName, people...)
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	people := []sj.Storeable{pass1}
+
+	err := sj.StashStaging(people...)
 
 	if err != nil {
 		t.Errorf("err=%v\n", err)
@@ -219,17 +189,16 @@ func TestDeleteResource(t *testing.T) {
 
 	// now move to resources table since they are valid
 	list := sj.RetrieveValidStaging(typeName)
-	uriMaker := func(res sj.StagingResource) string {
-		return fmt.Sprintf("https://scholars.duke.edu/individual/%s", res.Id)
-	}
-	// NOTE: this should clear them out from staging too
-	err = sj.BulkMoveStagingToResources(typeName, uriMaker, list...)
+	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
 	// now it's time to delete one, same one we added - but only Id data
 	person2 := TestPerson{Id: "per0000001"}
+	// NOTE: could use 'Stub' here since it's only for delete
+	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 
-	deletes := []sj.Identifiable{person2}
-	err = sj.BulkAddStagingForDelete(typeName, deletes...)
+	deletes := []sj.Identifiable{pass2}
+
+	err = sj.BulkAddStagingForDelete(deletes...)
 	if err != nil {
 		t.Errorf("error adding to staging (for delete):%s", err)
 	}
