@@ -25,18 +25,6 @@ func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, `{"alive": true}`)
 }
 
-type Passenger struct {
-	Type string `json:"type"`
-	Id   string `json:"id"`
-	//Data json.RawMessage `json:"data"`
-}
-
-//type Passenger struct {
-//Type string          `json:"type"`
-//	Id string `json:"id"`
-//Data json.RawMessage `json:"data"`
-//}
-
 // or id?
 /*
 
@@ -96,6 +84,7 @@ Nozzle
 
 --> Kinetic
 
+TODO: haven't used this yet - probably doesn't work
 */
 func IntakeHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -104,111 +93,26 @@ func IntakeHandler(w http.ResponseWriter, r *http.Request) {
 
 	io.WriteString(w, fmt.Sprintf(`{"category": %s}`, vars["category"]))
 
-	// var arbitraryJson array
-	//var arbitraryJson map[string]interface{}
-	// append '[', prepend ']' - to force into array?
-	var arr []Passenger
-	//var arr []map[string]interface{}
+	var arr []sj.Passenger
 	receivedJSON, err := ioutil.ReadAll(r.Body) //This reads raw request body
 	if err != nil {
-		//w.WriteHeader(http.StatusBadRequest)
-		//io.WriteString(w, fmt.Sprintf(`{"error": %s}`, err))
 		panic(err)
 	}
-	json.Unmarshal([]byte(receivedJSON), &arr)
-
-	list := make([]sj.StagingResource, len(arr))
-	for j, item := range arr {
-		//fmt.Printf("->%s\n", item.Uri)
-		//id := strings.Replace(item.Uri, "https://scholars.duke.edu/individual/", "", 1)
-		res := &sj.StagingResource{Id: item.Id,
-			Type: vars["category"],
-			Data: []byte(receivedJSON)}
-		list[j] = *res
+	err = json.Unmarshal([]byte(receivedJSON), &arr)
+	if err != nil {
+		panic(err)
 	}
 
-	grouped := make(map[string][]sj.StagingResource)
-	for _, res := range list {
-		grouped[res.Type] = append(grouped[res.Type], res)
+	resources := []sj.Identifiable{}
+	for _, res := range arr {
+		// NOTE: category might be 'type' in object already
+		res.Id = sj.Identifier{Id: res.Identifier().Id, Type: vars["category"]}
+		resources = append(resources, res)
 	}
-
-	// group by 'type' ?
-	// ever need to be different?
-	// need to do this?
-	// for i := 0; i < count; i += chunkSize {
-	//stashSize := 10000
-	//fmt.Printf("stashing %d items\n", stashSize)
-
-	for key, value := range grouped {
-		err = sj.BulkAddStagingResources(key, value...)
-		if err != nil {
-			fmt.Printf("err=%s", err)
-		}
+	err = sj.BulkAddStaging(resources...)
+	if err != nil {
+		panic(err)
 	}
-
-	//json.Unmarshal([]byte(receivedJSON), &arbitraryJson)
-
-	// how to tell if array or just one?
-	/*
-
-		fmt.Printf("found %d items\n", len(uris))
-
-		for j, item := range uris {
-			fmt.Printf("->%s\n", item.Uri)
-			id := strings.Replace(item.Uri, "https://scholars.duke.edu/individual/", "", 1)
-			res := &sj.StagingResource{Id: id,
-				Type: typeName,
-				Data: []byte(item.Json)}
-			list[j] = *res
-		}
-	*/
-	//decoder := json.NewDecoder(r.Body)
-	/*
-		    var t test_struct
-		    err := decoder.Decode(&t)
-		    if err != nil {
-		        panic(err)
-			}
-	*/
-	//log.Println(t.Tes
-
-	/*
-
-		func AddEmployee(w http.ResponseWriter, r *http.Request) {
-			var emp New_Emp
-			decoder := json.NewDecoder(r.Body)
-			decoder.Decode(&emp)
-
-			jsonValue, _ := json.Marshal(emp)
-			fmt.Printf("%+v\n", emp)
-			u := bytes.NewReader(jsonValue)
-
-			req, err := http.NewRequest("POST", "http://dummy.restapiexample.com/api/v1/create", u)
-			if err != nil {
-				fmt.Println("Error is req: ", err)
-			}
-
-			req.Header.Set("Content-Type", "application/json")
-			// create a Client
-			client := &http.Client{}
-
-			// Do sends an HTTP request and
-			resp, err := client.Do(req)
-			if err != nil {
-				fmt.Println("error in send req: ", err.Error())
-				w.WriteHeader(400)
-				//w.Write(err)
-			}
-			defer resp.Body.Close()
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)\
-
-			var data New_User_Resp
-			res, err := json.Unmarshal(resp.Body, &data)
-			w.Write(data)
-		}
-	*/
 }
 
 func TransferHandler(w http.ResponseWriter, r *http.Request) {
@@ -314,7 +218,8 @@ func main() {
 
 		       id param?
 	*/
-	router.HandleFunc("/intake/{category}", IntakeHandler).Methods("POST")
+	router.HandleFunc("/intake", IntakeHandler).Methods("POST")
+	//router.HandleFunc("/intake/{category}", IntakeHandler).Methods("POST")
 	router.HandleFunc("/transfer/{category}", TransferHandler).Methods("POST")
 	router.HandleFunc("/transfer/{category}/{id:[0-9]+}", TransferHandler).Methods("POST")
 	router.HandleFunc("/launch/{category}", LaunchHandler).Methods("GET")

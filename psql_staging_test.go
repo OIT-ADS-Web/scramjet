@@ -66,20 +66,23 @@ type TestPerson struct {
 	Name string `json:"name"`
 }
 
+/*
 func (tp TestPerson) Identifier() string {
 	return tp.Id
 }
 
-func (tp TestPerson) Uri() string {
-	return fmt.Sprintf("https://scholars.duke.edu/individual/%s", tp.Identifier())
+func (tp TestPerson) Grouping() string {
+	return "person"
 }
+*/
 
 func TestStagingIngest(t *testing.T) {
 	sj.ClearAllStaging()
 	person := &TestPerson{Id: "per0000001", Name: "Test"}
 	typeName := "person"
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person.Id, Type: typeName}, Obj: person}
 	// 1. save
-	err := sj.SaveStagingResource(person, typeName)
+	err := sj.SaveStagingResource(pass1)
 	if err != nil {
 		t.Error("error saving record")
 	}
@@ -97,8 +100,9 @@ func TestStagingListValid(t *testing.T) {
 	// maybe interface with Id and TypeName ??
 	person := &TestPerson{Id: "per0000001", Name: "Test"}
 	typeName := "person"
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person.Id, Type: typeName}, Obj: person}
 	// 1. save
-	err := sj.SaveStagingResource(person, typeName)
+	err := sj.SaveStagingResource(pass1)
 	if err != nil {
 		t.Error("could not save record")
 	}
@@ -121,8 +125,9 @@ func TestStagingListInValid(t *testing.T) {
 
 	person := &TestPerson{Id: "per0000001", Name: "Test"}
 	typeName := "person"
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person.Id, Type: typeName}, Obj: person}
 	// 1. save
-	err := sj.SaveStagingResource(person, typeName)
+	err := sj.SaveStagingResource(pass1)
 	if err != nil {
 		t.Error("could not save record")
 	}
@@ -145,9 +150,11 @@ func TestBulkAdd(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	people := []sj.Identifiable{pass1, pass2}
 
-	people := []sj.Identifiable{person1, person2}
-	err := sj.BulkAddStaging(typeName, people...)
+	err := sj.BulkAddStaging(people...)
 
 	if err != nil {
 		fmt.Println("could not save")
@@ -171,9 +178,11 @@ func TestTypicalUsage(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	people := []sj.Identifiable{pass1, pass2}
 
-	people := []sj.Identifiable{person1, person2}
-	err := sj.StashTypeStaging(typeName, people...)
+	err := sj.StashStaging(people...)
 
 	if err != nil {
 		fmt.Println("could not save")
@@ -197,9 +206,11 @@ func TestBatchValid(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	people := []sj.Identifiable{pass1, pass2}
 
-	people := []sj.Identifiable{person1, person2}
-	err := sj.StashTypeStaging(typeName, people...)
+	err := sj.StashStaging(people...)
 
 	if err != nil {
 		fmt.Println("could not save")
@@ -226,9 +237,11 @@ func TestBatchInValid(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	people := []sj.Identifiable{pass1, pass2}
 
-	people := []sj.Identifiable{person1, person2}
-	err := sj.StashTypeStaging(typeName, people...)
+	err := sj.StashStaging(people...)
 
 	if err != nil {
 		fmt.Println("could not save")
@@ -256,9 +269,11 @@ func TestBatchMarkDelete(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	people := []sj.Identifiable{pass1, pass2}
 
-	people := []sj.Identifiable{person1, person2}
-	err := sj.StashTypeStaging(typeName, people...)
+	err := sj.StashStaging(people...)
 
 	if err != nil {
 		fmt.Println("could not save")

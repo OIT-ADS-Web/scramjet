@@ -30,27 +30,13 @@ type Resource struct {
 	UpdatedAt time.Time    `db:"updated_at"`
 }
 
-// NOTE: this means all things have to have id field
-type GenericResource struct {
-	Id string `json:"id"`
-}
-
-// just a stub so we can read from resources table
-// and get the id match back to staging (for deletes)
-func (g GenericResource) Identifier() string {
-	return g.Id
-}
-
 func (res Resource) Identifier() string {
-	identified := GenericResource{}
-	if res.DataB.Status == pgtype.Present {
-		b := res.DataB.Bytes
-		err := json.Unmarshal(b, &identified)
-		if err != nil {
-			fmt.Printf("error unmarshalling json %#v\n", res)
-		}
-	}
-	return identified.Identifier()
+	// NOTE: will change this to be id
+	return res.Uri
+}
+
+func (res Resource) Grouping() string {
+	return res.Type
 }
 
 // TODO: could just send in date - leave it up to library user
@@ -140,34 +126,34 @@ func makeHash(text string) string {
 }
 
 // only does one at a time (not typically used)
-func SaveResource(obj UriAddressable, typeName string) (err error) {
+func SaveResource(obj StagingResource) (err error) {
 	ctx := context.Background()
-	str, err := json.Marshal(obj)
+	//str, err := json.Marshal(obj)
 
-	if err != nil {
-		log.Fatalln(err)
-		return err
-	}
+	//if err != nil {
+	//	log.Fatalln(err)
+	//	return err
+	//}
 
 	db := GetPool()
 
-	hash := makeHash(string(str))
+	hash := makeHash(string(obj.Data))
 
 	found := Resource{}
 	var data pgtype.JSON
 	var dataB pgtype.JSONB
-	err = data.Set(str)
+	err = data.Set(obj.Data)
 
 	if err != nil {
 		return err
 	}
-	err = dataB.Set(str)
+	err = dataB.Set(obj.Data)
 	if err != nil {
 		return err
 	}
 
-	res := &Resource{Uri: obj.Uri(),
-		Type:  typeName,
+	res := &Resource{Uri: obj.Identifier().Id,
+		Type:  obj.Identifier().Type,
 		Hash:  hash,
 		Data:  data,
 		DataB: dataB}
@@ -177,7 +163,7 @@ func SaveResource(obj UriAddressable, typeName string) (err error) {
 	  WHERE (uri = $1 AND type = $2)
 	`
 
-	row := db.QueryRow(ctx, findSQL, obj.Uri(), typeName)
+	row := db.QueryRow(ctx, findSQL, obj.Identifier().Id, obj.Identifier().Type)
 	notFoundError := row.Scan(&found.Uri, &found.Type)
 
 	tx, err := db.Begin(ctx)
@@ -342,36 +328,24 @@ func ClearResourceType(typeName string) (err error) {
 	return nil
 }
 
-func uniqueUri(idSlice []UriAddressable) []UriAddressable {
-	keys := make(map[string]bool)
-	list := []UriAddressable{}
-	for _, entry := range idSlice {
-		if _, value := keys[entry.Uri()]; !value {
-			keys[entry.Uri()] = true
-			list = append(list, entry)
-		}
-	}
-	return list
-}
-
 // add many at a time (upsert) -
 // FIXME: a lot of boilerplate code exactly the same
-func BulkAddResources(typeName string, items ...UriAddressable) error {
+func BulkAddResources(items ...Identifiable) error {
 	var resources = make([]Resource, 0)
 	var err error
 	// NOTE: not sure if these are necessary
-	list := uniqueUri(items)
+	list := unique(items)
 
 	for _, item := range list {
-		str, err := json.Marshal(item)
+		str, err := json.Marshal(item.Object())
 		if err != nil {
 			log.Fatalln(err)
 		}
 
 		hash := makeHash(string(str))
-
 		var data pgtype.JSON
 		var dataB pgtype.JSONB
+
 		err = data.Set(str)
 
 		if err != nil {
@@ -384,8 +358,9 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 			return err
 		}
 
-		res := &Resource{Uri: item.Uri(),
-			Type:  typeName,
+		// TODO: rename Uri field
+		res := &Resource{Uri: item.Identifier().Id,
+			Type:  item.Identifier().Type,
 			Hash:  hash,
 			Data:  data,
 			DataB: dataB}
@@ -455,7 +430,6 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	}
 
 	// now flag as 'updated' if hash changed (had to split this up into two sql calls)
-	// TODO: in theory uri should be primary key and enough to identify
 	sqlUpdates := `UPDATE resources set updated_at = NOW()
 	where (uri,type) in (
 		select rdt.uri, rdt.type from resource_data_tmp rdt
@@ -476,15 +450,17 @@ func BulkAddResources(typeName string, items ...UriAddressable) error {
 	return nil
 }
 
-func BulkMoveStagingToResources(typeName string, uriMaker UriFunc, items ...StagingResource) error {
+// NOTE: only need 'typeName' param for clearing out from staging
+func BulkMoveStagingTypeToResources(typeName string, items ...Identifiable) error {
 	var resources = make([]Resource, 0)
 	var err error
 	ctx := context.Background()
 
 	for _, item := range items {
-		str := item.Data
-		// need way to get URI (given a staging resource)
-		uri := uriMaker(item)
+		str, err := json.Marshal(item.Object())
+		if err != nil {
+			log.Fatalln(err)
+		}
 
 		hash := makeHash(string(str))
 
@@ -503,8 +479,8 @@ func BulkMoveStagingToResources(typeName string, uriMaker UriFunc, items ...Stag
 			return err
 		}
 
-		res := &Resource{Uri: uri,
-			Type:  typeName,
+		res := &Resource{Uri: item.Identifier().Id,
+			Type:  item.Identifier().Type,
 			Hash:  hash,
 			Data:  data,
 			DataB: dataB}
@@ -611,27 +587,10 @@ func BulkMoveStagingToResources(typeName string, uriMaker UriFunc, items ...Stag
 	return nil
 }
 
-//https://stackoverflow.com/questions/35179656/slice-chunking-in-go
-func chunkedResources(resources []UriAddressable, chunkSize int) [][]UriAddressable {
-	var divided [][]UriAddressable
-
-	for i := 0; i < len(resources); i += chunkSize {
-		end := i + chunkSize
-
-		if end > len(resources) {
-			end = len(resources)
-		}
-
-		divided = append(divided, resources[i:end])
-	}
-	return divided
-}
-
-// get typename ??
-func BatchDeleteStagingFromResources(resources []StagingResource) (err error) {
+func BatchDeleteStagingFromResources(resources []Identifiable) (err error) {
 	db := GetPool()
 	ctx := context.Background()
-	chunked := chunkedStaging(resources, 500)
+	chunked := chunked(resources, 500)
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
@@ -654,10 +613,10 @@ func BatchDeleteStagingFromResources(resources []StagingResource) (err error) {
 }
 
 // how to enusure staging-resource IS identifiable
-func batchDeleteStagingFromResources(ctx context.Context, resources []StagingResource, tx pgx.Tx) (err error) {
+func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) (err error) {
 	var clauses = make([]string, 0)
 	for _, resource := range resources {
-		s := fmt.Sprintf("('%s', '%s')", resource.Id, resource.Type)
+		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
 		clauses = append(clauses, s)
 	}
 
@@ -666,7 +625,8 @@ func batchDeleteStagingFromResources(ctx context.Context, resources []StagingRes
 	// TODO: not crazy about this ... but hoping for something that did
 	// not require anything specific in the json data
 	// could at least allow a param "idColumn" (would be 'id')
-	sql := fmt.Sprintf(`DELETE from resources WHERE (data_b->>'id', type) IN (
+	// NOTE: publications don't have data_b->>'id'
+	sql := fmt.Sprintf(`DELETE from resources WHERE (uri, type) IN (
 		%s
 	)`, inClause)
 
@@ -678,10 +638,10 @@ func batchDeleteStagingFromResources(ctx context.Context, resources []StagingRes
 	return nil
 }
 
-func BatchDeleteResourcesFromResources(resources []UriAddressable) (err error) {
+func BatchDeleteResourcesFromResources(resources []Identifiable) (err error) {
 	db := GetPool()
 	ctx := context.Background()
-	chunked := chunkedResources(resources, 500)
+	chunked := chunked(resources, 500)
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
@@ -703,15 +663,15 @@ func BatchDeleteResourcesFromResources(resources []UriAddressable) (err error) {
 	return nil
 }
 
-func batchDeleteResourcesFromResources(ctx context.Context, resources []UriAddressable, tx pgx.Tx) (err error) {
+func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) (err error) {
 	var uris = make([]string, 0)
 	for _, resource := range resources {
-		s := fmt.Sprintf("'%s'", resource.Uri())
+		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
 		uris = append(uris, s)
 	}
 	inClause := strings.Join(uris, ", ")
 
-	sql := fmt.Sprintf(`DELETE from resources WHERE uri IN (
+	sql := fmt.Sprintf(`DELETE from resources WHERE uri, type IN (
 		%s
 	)`, inClause)
 
@@ -721,16 +681,6 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []UriAddre
 		return err
 	}
 	return nil
-}
-
-// just a stub - so I can match staging to resource table
-type UriOnly struct {
-	Fn  UriFunc
-	Res StagingResource
-}
-
-func (uri UriOnly) Uri() string {
-	return uri.Fn(uri.Res)
 }
 
 func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
@@ -751,7 +701,7 @@ func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
 	return nil
 }
 
-func BulkRemoveResources(items ...UriAddressable) error {
+func BulkRemoveResources(items ...Identifiable) error {
 	// should it go to trouble of adding to staging as delete
 	// and then turn around and delete?
 	err := BatchDeleteResourcesFromResources(items)
