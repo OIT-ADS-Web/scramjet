@@ -20,7 +20,7 @@ import (
 // * 'data' can be used for change comparison with hash
 // * 'data_b' can be used for searches
 type Resource struct {
-	Uri       string       `db:"uri"`
+	Id        string       `db:"id"`
 	Type      string       `db:"type"`
 	Hash      string       `db:"hash"`
 	Data      pgtype.JSON  `db:"data"`
@@ -30,7 +30,7 @@ type Resource struct {
 }
 
 func (res Resource) Identifier() Identifier {
-	return Identifier{res.Uri, res.Type}
+	return Identifier{res.Id, res.Type}
 }
 
 // TODO: could just send in date - leave it up to library user
@@ -40,21 +40,21 @@ func RetrieveTypeResources(typeName string) (error, []Resource) {
 	resources := []Resource{}
 	ctx := context.Background()
 	var err error
-	sql := `SELECT uri, type, hash, data, data_b
+	sql := `SELECT id, type, hash, data, data_b
 		FROM resources 
 		WHERE type =  $1
 		`
 	rows, _ := db.Query(ctx, sql, typeName)
 
 	for rows.Next() {
-		var uri string
+		var id string
 		var typeName string
 		var hash string
 		var json pgtype.JSON
 		var jsonB pgtype.JSONB
 
-		err = rows.Scan(&uri, &typeName, &hash, &json, &jsonB)
-		res := Resource{Uri: uri,
+		err = rows.Scan(&id, &typeName, &hash, &json, &jsonB)
+		res := Resource{Id: id,
 			Type:  typeName,
 			Hash:  hash,
 			Data:  json,
@@ -78,7 +78,7 @@ func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error
 	resources := []Resource{}
 	ctx := context.Background()
 	var err error
-	sql := `SELECT uri, type, hash, data, data_b
+	sql := `SELECT id, type, hash, data, data_b
 		FROM resources 
 		WHERE type =  $1
 		LIMIT $2
@@ -86,14 +86,14 @@ func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error
 	rows, _ := db.Query(ctx, sql, typeName, limit)
 
 	for rows.Next() {
-		var uri string
+		var id string
 		var typeName string
 		var hash string
 		var json pgtype.JSON
 		var jsonB pgtype.JSONB
 
-		err = rows.Scan(&uri, &typeName, &hash, &json, &jsonB)
-		res := Resource{Uri: uri,
+		err = rows.Scan(&id, &typeName, &hash, &json, &jsonB)
+		res := Resource{Id: id,
 			Type:  typeName,
 			Hash:  hash,
 			Data:  json,
@@ -152,19 +152,19 @@ func SaveResource(obj Storeable) (err error) {
 		return err
 	}
 
-	res := &Resource{Uri: obj.Identifier().Id,
+	res := &Resource{Id: obj.Identifier().Id,
 		Type:  obj.Identifier().Type,
 		Hash:  hash,
 		Data:  data,
 		DataB: dataB}
 
-	findSQL := `SELECT uri, type, hash, data, data_b  
+	findSQL := `SELECT id, type, hash, data, data_b  
 	  FROM resources 
-	  WHERE (uri = $1 AND type = $2)
+	  WHERE (id = $1 AND type = $2)
 	`
 
 	row := db.QueryRow(ctx, findSQL, obj.Identifier().Id, obj.Identifier().Type)
-	notFoundError := row.Scan(&found.Uri, &found.Type)
+	notFoundError := row.Scan(&found.Id, &found.Type)
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -173,9 +173,9 @@ func SaveResource(obj Storeable) (err error) {
 	// either insert or update
 	if notFoundError != nil {
 		// TODO: created_at, updated_at
-		sql := `INSERT INTO resources (uri, type, hash, data, data_b) 
+		sql := `INSERT INTO resources (id, type, hash, data, data_b) 
 	      VALUES ($1, $2, $3, $4, $5)`
-		_, err := tx.Exec(ctx, sql, res.Uri, res.Type, res.Hash, &res.Data, &res.DataB)
+		_, err := tx.Exec(ctx, sql, res.Id, res.Type, res.Hash, &res.Data, &res.DataB)
 
 		if err != nil {
 			return err
@@ -184,18 +184,18 @@ func SaveResource(obj Storeable) (err error) {
 
 		if strings.Compare(hash, found.Hash) == 0 {
 			// some kind of debug level?
-			log.Printf(">SKIPPING:%v\n", found.Uri)
+			log.Printf(">SKIPPING:%v\n", found.Id)
 		} else {
-			log.Printf(">UPDATE:%v\n", found.Uri)
+			log.Printf(">UPDATE:%v\n", found.Id)
 			sql := `UPDATE resources 
-	        set uri = $1, 
+	        set id = $1, 
 		      type = $2, 
 		      hash = $3, 
 		      data = $4, 
 		      data_b = $5,
 		      updated_at = NOW()
-		      WHERE uri = $1 and type = $2`
-			_, err := tx.Exec(ctx, sql, res.Uri, res.Type, res.Hash, &res.Data, &res.DataB)
+		      WHERE id = $1 and type = $2`
+			_, err := tx.Exec(ctx, sql, res.Id, res.Type, res.Hash, &res.Data, &res.DataB)
 
 			if err != nil {
 				return err
@@ -235,15 +235,15 @@ func MakeResourceSchema() {
 	// any hash based comparison, but it could be still be
 	// useful for querying
 	sql := `create table resources (
-        uri text NOT NULL,
+        id text NOT NULL,
         type text NOT NULL,
         hash text NOT NULL,
         data json NOT NULL,
         data_b jsonb NOT NULL,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
-		PRIMARY KEY(uri, type),
-		CONSTRAINT uniq_uri_hash UNIQUE (uri, type, hash)
+		PRIMARY KEY(id, type),
+		CONSTRAINT uniq_id_hash UNIQUE (id, type, hash)
     )`
 	ctx := context.Background()
 	db := GetPool()
@@ -358,8 +358,7 @@ func BulkAddResources(items ...Storeable) error {
 			return err
 		}
 
-		// TODO: rename Uri field
-		res := &Resource{Uri: item.Identifier().Id,
+		res := &Resource{Id: item.Identifier().Id,
 			Type:  item.Identifier().Type,
 			Hash:  hash,
 			Data:  data,
@@ -377,9 +376,9 @@ func BulkAddResources(items ...Storeable) error {
 	// supposedly no-op if everything okay
 	defer tx.Rollback(ctx)
 	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
-	  (uri text NOT NULL, type text NOT NULL, hash text NOT NULL,
+	  (id text NOT NULL, type text NOT NULL, hash text NOT NULL,
 		data json NOT NULL, data_b jsonb NOT NULL,
-		PRIMARY KEY(uri, type)
+		PRIMARY KEY(id, type)
 	  )
 	  ON COMMIT DROP
 	`
@@ -398,10 +397,10 @@ func BulkAddResources(items ...Storeable) error {
 
 		if readError != nil {
 			// do something else here, mark error somewhere?
-			fmt.Printf("skipping %s:%s\n", res.Uri, readError)
+			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
-		inputRows = append(inputRows, []interface{}{res.Uri,
+		inputRows = append(inputRows, []interface{}{res.Id,
 			res.Type,
 			res.Hash,
 			x,
@@ -409,7 +408,7 @@ func BulkAddResources(items ...Storeable) error {
 	}
 
 	_, err = tx.CopyFrom(ctx, pgx.Identifier{"resource_data_tmp"},
-		[]string{"uri", "type", "hash", "data", "data_b"},
+		[]string{"id", "type", "hash", "data", "data_b"},
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
@@ -417,10 +416,10 @@ func BulkAddResources(items ...Storeable) error {
 		return err
 	}
 
-	sqlUpsert := `INSERT INTO resources (uri, type, hash, data, data_b)
-	  SELECT uri, type, hash, data, data_b
+	sqlUpsert := `INSERT INTO resources (id, type, hash, data, data_b)
+	  SELECT id, type, hash, data, data_b
 	  FROM resource_data_tmp
-		ON CONFLICT (uri, type) DO UPDATE SET data = EXCLUDED.data,
+		ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data,
 		   data_b = EXCLUDED.data_b, hash = EXCLUDED.hash
 	`
 	_, err = tx.Exec(ctx, sqlUpsert)
@@ -431,9 +430,9 @@ func BulkAddResources(items ...Storeable) error {
 
 	// now flag as 'updated' if hash changed (had to split this up into two sql calls)
 	sqlUpdates := `UPDATE resources set updated_at = NOW()
-	where (uri,type) in (
-		select rdt.uri, rdt.type from resource_data_tmp rdt
-		join resources r on (r.uri = rdt.uri and r.type = rdt.type)
+	where (id,type) in (
+		select rdt.id, rdt.type from resource_data_tmp rdt
+		join resources r on (r.id = rdt.id and r.type = rdt.type)
 		where r.hash != rdt.hash
 	)`
 
@@ -473,7 +472,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 			return err
 		}
 
-		res := &Resource{Uri: item.Identifier().Id,
+		res := &Resource{Id: item.Identifier().Id,
 			Type:  item.Identifier().Type,
 			Hash:  hash,
 			Data:  data,
@@ -492,9 +491,9 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 	defer tx.Rollback(ctx)
 
 	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
-	  (uri text NOT NULL, type text NOT NULL, hash text NOT NULL,
+	  (id text NOT NULL, type text NOT NULL, hash text NOT NULL,
 		data json NOT NULL, data_b jsonb NOT NULL,
-		PRIMARY KEY(uri, type)
+		PRIMARY KEY(id, type)
 	  )
 	  ON COMMIT DROP
 	`
@@ -512,7 +511,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		readError := res.Data.AssignTo(&x)
 		if readError != nil {
 			// do something else here, mark error somewhere?
-			fmt.Printf("skipping %s:%s\n", res.Uri, readError)
+			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
 		y := []byte{}
@@ -520,10 +519,10 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 
 		if readError != nil {
 			// do something else here, mark error somewhere?
-			fmt.Printf("skipping %s:%s\n", res.Uri, readError)
+			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
-		inputRows = append(inputRows, []interface{}{res.Uri,
+		inputRows = append(inputRows, []interface{}{res.Id,
 			res.Type,
 			res.Hash,
 			x,
@@ -531,7 +530,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 	}
 
 	_, err = tx.CopyFrom(ctx, pgx.Identifier{"resource_data_tmp"},
-		[]string{"uri", "type", "hash", "data", "data_b"},
+		[]string{"id", "type", "hash", "data", "data_b"},
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
@@ -539,12 +538,10 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		return err
 	}
 
-	// updated_at - should probably be timezone aware ...
-	// ON CONFLICT (uri, type) where hash != EXCLUDED.hash
-	sqlUpsert := `INSERT INTO resources (uri, type, hash, data, data_b)
-	  SELECT uri, type, hash, data, data_b 
+	sqlUpsert := `INSERT INTO resources (id, type, hash, data, data_b)
+	  SELECT id, type, hash, data, data_b 
 	  FROM resource_data_tmp
-		ON CONFLICT (uri, type) DO UPDATE SET data = EXCLUDED.data, 
+		ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data, 
 		   data_b = EXCLUDED.data_b, hash = EXCLUDED.hash
 	`
 	_, err = tx.Exec(ctx, sqlUpsert)
@@ -554,11 +551,11 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 	}
 
 	// now flag as 'updated' if hash changed (had to split this up into two sql calls)
-	// TODO: in theory uri should be primary key and enough to identify
+	// TODO: more timezone aware
 	sqlUpdates := `UPDATE resources set updated_at = NOW()
-	where (uri,type) in (
-		select rdt.uri, rdt.type from resource_data_tmp rdt
-		join resources r on (r.uri = rdt.uri and r.type = rdt.type)
+	where (id,type) in (
+		select rdt.id, rdt.type from resource_data_tmp rdt
+		join resources r on (r.id = rdt.id and r.type = rdt.type)
 		where r.hash != rdt.hash
 	)`
 
@@ -616,15 +613,10 @@ func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiab
 
 	inClause := strings.Join(clauses, ", ")
 
-	// TODO: not crazy about this ... but hoping for something that did
-	// not require anything specific in the json data
-	// could at least allow a param "idColumn" (would be 'id')
-	// NOTE: publications don't have data_b->>'id'
-	sql := fmt.Sprintf(`DELETE from resources WHERE (uri, type) IN (
+	sql := fmt.Sprintf(`DELETE from resources WHERE (id, type) IN (
 		%s
 	)`, inClause)
 
-	//fmt.Printf("runnign sql:%s\n", sql)
 	_, err = tx.Exec(ctx, sql)
 
 	if err != nil {
@@ -659,14 +651,14 @@ func BatchDeleteResourcesFromResources(resources []Identifiable) (err error) {
 }
 
 func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) (err error) {
-	var uris = make([]string, 0)
+	var ids = make([]string, 0)
 	for _, resource := range resources {
 		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
-		uris = append(uris, s)
+		ids = append(ids, s)
 	}
-	inClause := strings.Join(uris, ", ")
+	inClause := strings.Join(ids, ", ")
 
-	sql := fmt.Sprintf(`DELETE from resources WHERE uri, type IN (
+	sql := fmt.Sprintf(`DELETE from resources WHERE id, type IN (
 		%s
 	)`, inClause)
 

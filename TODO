@@ -49,11 +49,15 @@ Propulsion
 Intake
 Launch
 
+(departure area)
+->Terminal (staging)
+:: check (validate) scan -> pass -> boarding pass
+->Destination (resources)
 
 CREATE TABLE resources_audit (
     operation char(1) NOT NULL,
     stamp timestamp NOT NULL,
-    uri text NOT NULL,
+    id text NOT NULL,
     type text NOT NULL,
     hash text NOT NULL,
     data json NOT NULL,
@@ -100,3 +104,19 @@ CREATE TRIGGER resource_audit_del
     REFERENCING OLD TABLE AS old_table
     FOR EACH STATEMENT EXECUTE FUNCTION process_res_delete_audit();
 
+
+Intake ->
+Screening ->
+Delivery ->
+
+
+CREATE OR REPLACE FUNCTION process_res_update_audit() RETURNS TRIGGER AS $res_update_audit$
+    BEGIN
+         INSERT INTO resources_audit
+         SELECT 'U', now(), n.* FROM 
+         new_table n
+         join old_table o on o.id = n.id
+         where n.updated_at > o.updated_at;
+       RETURN NULL; -- result is ignored since this is an AFTER trigger
+    END;
+$res_update_audit$ LANGUAGE plpgsql;
