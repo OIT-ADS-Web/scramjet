@@ -4,75 +4,68 @@ import (
 	"fmt"
 )
 
-type StasherOptions struct {
-	FlushSize int
+type IntakeListMaker func(int) []Storeable
+type ChunkableIntakeConfig struct {
+	Count     int
+	ChunkSize int
+	JustTest  bool
+	TypeName  string
+	ListMaker IntakeListMaker
 }
 
-// NOTE: this is an idea, not used or fleshed out yet
-// looking for a facade to hide implementation details
-// or Staging/Resource type functions
-type Stasher interface {
-	Items() map[string][]Storeable
-	AddItems(string, ...Storeable)
-	StashItems()
-	SetOptions(StasherOptions)
-}
-
-type stagingStasher struct {
-	options StasherOptions
-	list    map[string][]Storeable
-}
-
-func (s stagingStasher) Items() map[string][]Storeable {
-	return s.list
-}
-
-func NewStasher() Stasher {
-	// NOTE: making default big - but also not even utilizing yet
-	options := StasherOptions{FlushSize: 1000000}
-	stashMap := make(map[string][]Storeable)
-	return &stagingStasher{
-		list:    stashMap,
-		options: options,
-	}
-}
-
-func (s stagingStasher) AddItems(typeName string, objs ...Storeable) {
-	// NOTE: might want to add something here to 'BulkAddStaging'
-	// if size is > FlushSize (at some point)
-	s.list[typeName] = append(s.list[typeName], objs...)
-}
-
-func (s stagingStasher) SetOptions(opts StasherOptions) {
-	s.options = opts
-}
-
-// moves into database
-func (s stagingStasher) StashItems() {
-	for k, v := range s.Items() {
-		fmt.Printf("**** %s *****\n", k)
-		for _, item := range v {
-			fmt.Printf("->%s\n", item.Identifier())
-		}
-		err := BulkAddStaging(v...)
-		if err != nil {
-			fmt.Printf("saving error: %v\n", err)
+func IntakeInChunks(ins ChunkableIntakeConfig) {
+	for i := 0; i < ins.Count; i += ins.ChunkSize {
+		fmt.Printf("> retrieving %d-%d of %d\n", i, i+ins.ChunkSize, ins.Count)
+		list := ins.ListMaker(i)
+		if !ins.JustTest {
+			err := BulkAddStaging(list...)
+			if err != nil {
+				fmt.Println("could not save as list")
+			}
+		} else {
+			fmt.Printf("would save:%s", list)
 		}
 	}
 }
 
-func (s stagingStasher) DeleteItems() {
-	for k, v := range s.Items() {
-		fmt.Printf("**** %s *****\n", k)
-		ids := make([]Identifiable, 0)
-		for _, item := range v {
-			fmt.Printf("->%s\n", item.Identifier())
-			stub := Stub{Id: item.Identifier()}
-			ids = append(ids, stub)
-		}
-		err := BulkAddStagingForDelete(ids...)
+type OutakeListMaker func() []string
+type OutakeProcessConfig struct {
+	JustTest  bool
+	TypeName  string
+	ListMaker OutakeListMaker
+}
+
+// TODO: shouldn't this return error if there is a problem?
+func ProcessOutake(proc OutakeProcessConfig) {
+	sourceData := proc.ListMaker()
+	destData := make([]string, 0)
+	err, resources := RetrieveTypeResources(proc.TypeName)
+	if err != nil {
+		fmt.Printf("couldn't retrieve list of %s\n", proc.TypeName)
+	}
+	if len(sourceData) == 0 {
+		fmt.Printf("0 source records found - this would delete all %s!\n", proc.TypeName)
+		return
+	}
+
+	for _, res := range resources {
+		destData = append(destData, res.Id)
+	}
+	extras := Difference(destData, sourceData)
+
+	fmt.Printf("found %d extras\n", len(extras))
+	deletes := make([]Identifiable, 0)
+	for _, id := range extras {
+		deletes = append(deletes, Stub{Id: Identifier{Id: id, Type: proc.TypeName}})
+	}
+
+	if !proc.JustTest {
+		// NOTE: this is just marking them
+		err = BulkAddStagingForDelete(deletes...)
 		if err != nil {
-			fmt.Printf("saving error: %v\n", err)
+			fmt.Println("could not mark for delete")
 		}
+	} else {
+		fmt.Printf("would mark these:%s\n", deletes)
 	}
 }
