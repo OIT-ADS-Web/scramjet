@@ -121,9 +121,3 @@ CREATE OR REPLACE FUNCTION process_res_update_audit() RETURNS TRIGGER AS $res_up
     END;
 $res_update_audit$ LANGUAGE plpgsql;
 
-TODO:
-widgets_deploy merge request
-vivo_admin merge request
-
-scramjet as service or
-scholars_data_transfer as service
