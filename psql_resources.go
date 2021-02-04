@@ -711,3 +711,20 @@ func ResourceCount(typeName string) int {
 	}
 	return count
 }
+
+func GetMaxUpdatedAt(typeName string) time.Time {
+	// NOTE: shouldn't be possible to be null, but
+	// could be nothing of that typeName - therefore default to 1/1/2019
+	var max time.Time
+	ctx := context.Background()
+	sql := `SELECT coalesce(max(updated_at), to_date('2019', 'YYYY'))
+	FROM resources res
+	WHERE type = $1`
+	db := GetPool()
+	row := db.QueryRow(ctx, sql, typeName)
+	err := row.Scan(&max)
+	if err != nil {
+		log.Fatalf("error checking count %v", err)
+	}
+	return max
+}

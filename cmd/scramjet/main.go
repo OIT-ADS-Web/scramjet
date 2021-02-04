@@ -93,7 +93,7 @@ func IntakeHandler(w http.ResponseWriter, r *http.Request) {
 
 	io.WriteString(w, fmt.Sprintf(`{"category": %s}`, vars["category"]))
 
-	var arr []sj.Passenger
+	var arr []sj.Packet
 	receivedJSON, err := ioutil.ReadAll(r.Body) //This reads raw request body
 	if err != nil {
 		panic(err)
@@ -105,8 +105,8 @@ func IntakeHandler(w http.ResponseWriter, r *http.Request) {
 
 	resources := []sj.Storeable{}
 	for _, res := range arr {
-		// NOTE: category might be 'type' in object already
-		res.Id = sj.Identifier{Id: res.Identifier().Id, Type: vars["category"]}
+		res := sj.Packet{Id: sj.Identifier{Id: res.Identifier().Id, Type: vars["category"]},
+			Obj: res}
 		resources = append(resources, res)
 	}
 	err = sj.BulkAddStaging(resources...)
@@ -199,7 +199,7 @@ func main() {
 	/*
 				** INTAKE
 
-				<passenger>
+				<packet>
 				/intake/[type]
 				{'type': 'Person': id: [an id]: data: [json] },
 				{'type': 'Person': id: [an id]: data: [json] }, etc...

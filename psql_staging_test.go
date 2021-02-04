@@ -80,7 +80,7 @@ func TestStagingIngest(t *testing.T) {
 	sj.ClearAllStaging()
 	person := &TestPerson{Id: "per0000001", Name: "Test"}
 	typeName := "person"
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person.Id, Type: typeName}, Obj: person}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person.Id, Type: typeName}, Obj: person}
 	// 1. save
 	err := sj.SaveStagingResource(pass1)
 	if err != nil {
@@ -100,7 +100,7 @@ func TestStagingListValid(t *testing.T) {
 	// maybe interface with Id and TypeName ??
 	person := &TestPerson{Id: "per0000001", Name: "Test"}
 	typeName := "person"
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person.Id, Type: typeName}, Obj: person}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person.Id, Type: typeName}, Obj: person}
 	// 1. save
 	err := sj.SaveStagingResource(pass1)
 	if err != nil {
@@ -125,7 +125,7 @@ func TestStagingListInValid(t *testing.T) {
 
 	person := &TestPerson{Id: "per0000001", Name: "Test"}
 	typeName := "person"
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person.Id, Type: typeName}, Obj: person}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person.Id, Type: typeName}, Obj: person}
 	// 1. save
 	err := sj.SaveStagingResource(pass1)
 	if err != nil {
@@ -150,8 +150,8 @@ func TestBulkAdd(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
-	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.BulkAddStaging(people...)
@@ -178,8 +178,8 @@ func TestTypicalUsage(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
-	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.StashStaging(people...)
@@ -206,8 +206,8 @@ func TestBatchValid(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
-	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.StashStaging(people...)
@@ -237,8 +237,8 @@ func TestBatchInValid(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
-	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.StashStaging(people...)
@@ -269,8 +269,8 @@ func TestBatchMarkDelete(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
-	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.StashStaging(people...)
