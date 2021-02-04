@@ -4,7 +4,7 @@
 
 ** INTAKE
 
-<passenger>
+<packet>
 /api/intake/[type]
 {'type': 'Person': id: [an id]: payload: [json] }
 
@@ -120,3 +120,10 @@ CREATE OR REPLACE FUNCTION process_res_update_audit() RETURNS TRIGGER AS $res_up
        RETURN NULL; -- result is ignored since this is an AFTER trigger
     END;
 $res_update_audit$ LANGUAGE plpgsql;
+
+TODO:
+widgets_deploy merge request
+vivo_admin merge request
+
+scramjet as service or
+scholars_data_transfer as service

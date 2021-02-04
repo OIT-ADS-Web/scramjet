@@ -15,8 +15,8 @@ func TestResourcesIngest(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
-	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.StashStaging(people...)
@@ -57,8 +57,8 @@ func TestBatchResources(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
-	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 	people := []sj.Storeable{pass1, pass2}
 
 	err := sj.StashStaging(people...)
@@ -102,8 +102,8 @@ func TestBatchDeleteResources(t *testing.T) {
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
-	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 	people := []sj.Storeable{pass1, pass2}
 
 	err = sj.StashStaging(people...)
@@ -170,7 +170,7 @@ func TestDeleteResource(t *testing.T) {
 	typeName := "person"
 
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
 	people := []sj.Storeable{pass1}
 
 	err := sj.StashStaging(people...)
@@ -194,7 +194,7 @@ func TestDeleteResource(t *testing.T) {
 	// now it's time to delete one, same one we added - but only Id data
 	person2 := TestPerson{Id: "per0000001"}
 	// NOTE: could use 'Stub' here since it's only for delete
-	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 
 	deletes := []sj.Identifiable{pass2}
 

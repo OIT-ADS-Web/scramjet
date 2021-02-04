@@ -44,7 +44,7 @@ func ProcessOutake(proc OutakeProcessConfig) {
 		fmt.Printf("couldn't retrieve list of %s\n", proc.TypeName)
 	}
 	if len(sourceData) == 0 {
-		fmt.Printf("0 source records found - this would delete all %s!\n", proc.TypeName)
+		fmt.Printf("0 source records found - this would delete all %s records!\n", proc.TypeName)
 		return
 	}
 

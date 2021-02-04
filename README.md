@@ -26,8 +26,8 @@ import (
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
 	// must use anything of interface 'Storeable'
-	pass1 := sj.Passenger{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
-	pass2 := sj.Passenger{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 
 	people := []sj.Storeable{pass1, pass2}
 	err := sj.BulkAddStaging(people...)

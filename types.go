@@ -21,16 +21,16 @@ func (s Stub) Identifier() Identifier {
 	return s.Id
 }
 
-type Passenger struct {
+type Packet struct {
 	Id  Identifier
 	Obj interface{} // this will be serialized
 }
 
-func (ps Passenger) Identifier() Identifier {
-	return ps.Id
+func (p Packet) Identifier() Identifier {
+	return p.Id
 }
 
-func (ps Passenger) Object() interface{} {
+func (ps Packet) Object() interface{} {
 	return ps.Obj
 }
 
