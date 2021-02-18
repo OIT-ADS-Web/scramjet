@@ -232,6 +232,22 @@ func ProcessTypeStaging(typeName string, validator ValidatorFunc) {
 	BatchMarkInvalidInStaging(rejects)
 }
 
+// TODO: really should send back err or status or something
+func ProcessSingleStaging(item Identifiable, validator ValidatorFunc) {
+	id := item.Identifier()
+	res := RetrieveSingleStaging(id.Id, id.Type)
+	valid := validator(string(res.Data))
+
+	var results = make([]Identifiable, 0)
+	results = append(results, res)
+
+	if valid {
+		BatchMarkValidInStaging(results)
+	} else {
+		BatchMarkInvalidInStaging(results)
+	}
+}
+
 func RetrieveSingleStaging(id string, typeName string) StagingResource {
 	db := GetPool()
 	ctx := context.Background()
@@ -242,6 +258,42 @@ func RetrieveSingleStaging(id string, typeName string) StagingResource {
 	findSQL := `SELECT id, type, data 
 	  FROM staging
 	  WHERE (id = $1 AND type = $2)`
+
+	row := db.QueryRow(ctx, findSQL, id, typeName)
+	err := row.Scan(&found)
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return found
+}
+
+func RetrieveSingleStagingValid(id string, typeName string) StagingResource {
+	db := GetPool()
+	ctx := context.Background()
+	var found StagingResource
+
+	findSQL := `SELECT id, type, data 
+	  FROM staging
+	  WHERE (id = $1 AND type = $2) and is_valid = true`
+
+	row := db.QueryRow(ctx, findSQL, id, typeName)
+	err := row.Scan(&found)
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return found
+}
+
+func RetrieveSingleStagingDelete(id string, typeName string) StagingResource {
+	db := GetPool()
+	ctx := context.Background()
+	var found StagingResource
+
+	findSQL := `SELECT id, type, data 
+	  FROM staging
+	  WHERE (id = $1 AND type = $2) and to_delete = true`
 
 	row := db.QueryRow(ctx, findSQL, id, typeName)
 	err := row.Scan(&found)
@@ -586,6 +638,29 @@ func ClearStagingTypeDeletes(typeName string) (err error) {
 	sql := `DELETE from staging`
 
 	sql += fmt.Sprintf(" WHERE type='%s' AND to_delete = TRUE", typeName)
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, sql)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ClearDeletedFromStaging(id string, typeName string) (err error) {
+	db := GetPool()
+	ctx := context.Background()
+	sql := `DELETE from staging`
+
+	sql += fmt.Sprintf(" WHERE id = %s AND type='%s' AND to_delete = TRUE", id, typeName)
 
 	tx, err := db.Begin(ctx)
 	if err != nil {

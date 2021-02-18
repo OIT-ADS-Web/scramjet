@@ -578,7 +578,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 	return nil
 }
 
-func BatchDeleteStagingFromResources(resources []Identifiable) (err error) {
+func BatchDeleteStagingFromResources(resources ...Identifiable) (err error) {
 	db := GetPool()
 	ctx := context.Background()
 	chunked := chunked(resources, 500)
@@ -625,7 +625,7 @@ func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiab
 	return nil
 }
 
-func BatchDeleteResourcesFromResources(resources []Identifiable) (err error) {
+func BatchDeleteResourcesFromResources(resources ...Identifiable) (err error) {
 	db := GetPool()
 	ctx := context.Background()
 	chunked := chunked(resources, 500)
@@ -672,7 +672,7 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifi
 
 func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
 	deletes := RetrieveDeletedStaging(typeName)
-	err = BatchDeleteStagingFromResources(deletes)
+	err = BatchDeleteStagingFromResources(deletes...)
 	if err != nil {
 		return err
 	}
@@ -687,10 +687,27 @@ func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
 	return nil
 }
 
+func RemoveStagingDeletedFromResources(id string, typeName string) (err error) {
+	deleted := RetrieveSingleStagingDelete(id, typeName)
+	err = BatchDeleteStagingFromResources(deleted)
+	if err != nil {
+		return err
+	}
+	// TODO: then remove from staging?  or let caller ?
+	// in theory could use to remove from solr, rdf etc...
+	// but could also use notify
+	// no errors - would catch later with 'orphan' check
+	err = ClearDeletedFromStaging(id, typeName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func BulkRemoveResources(items ...Identifiable) error {
 	// should it go to trouble of adding to staging as delete
 	// and then turn around and delete?
-	err := BatchDeleteResourcesFromResources(items)
+	err := BatchDeleteResourcesFromResources(items...)
 	if err != nil {
 		return err
 	}
