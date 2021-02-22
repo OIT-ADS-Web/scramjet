@@ -298,7 +298,7 @@ func RetrieveSingleStagingDelete(id string, typeName string) StagingResource {
 	  WHERE (id = $1 AND type = $2) and to_delete = true`
 
 	row := db.QueryRow(ctx, findSQL, id, typeName)
-	err := row.Scan(&found)
+	err := row.Scan(&found.Id, &found.Type, &found.Data)
 
 	if err != nil {
 		log.Fatalln(err)
