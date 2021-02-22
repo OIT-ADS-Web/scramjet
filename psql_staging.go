@@ -235,7 +235,9 @@ func ProcessTypeStaging(typeName string, validator ValidatorFunc) {
 // TODO: really should send back err or status or something
 func ProcessSingleStaging(item Identifiable, validator ValidatorFunc) {
 	id := item.Identifier()
+	// TODO: what to do if no record found?
 	res := RetrieveSingleStaging(id.Id, id.Type)
+
 	valid := validator(string(res.Data))
 
 	var results = make([]Identifiable, 0)
@@ -662,7 +664,7 @@ func ClearDeletedFromStaging(id string, typeName string) (err error) {
 	ctx := context.Background()
 	sql := `DELETE from staging`
 
-	sql += fmt.Sprintf(" WHERE id = %s AND type='%s' AND to_delete = TRUE", id, typeName)
+	sql += fmt.Sprintf(" WHERE id = '%s' AND type='%s' AND to_delete = TRUE", id, typeName)
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
