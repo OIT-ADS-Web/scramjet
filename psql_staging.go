@@ -260,10 +260,11 @@ func RetrieveSingleStaging(id string, typeName string) StagingResource {
 	  WHERE (id = $1 AND type = $2)`
 
 	row := db.QueryRow(ctx, findSQL, id, typeName)
-	err := row.Scan(&found)
+
+	err := row.Scan(&found.Id, &found.Type, &found.Data)
 
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalf("ERROR: retrieiving single from staging: %s\n", err)
 	}
 	return found
 }
@@ -275,13 +276,14 @@ func RetrieveSingleStagingValid(id string, typeName string) StagingResource {
 
 	findSQL := `SELECT id, type, data 
 	  FROM staging
-	  WHERE (id = $1 AND type = $2) and is_valid = true`
+	  WHERE (id = $1 AND type = $2) 
+	  AND is_valid = true`
 
 	row := db.QueryRow(ctx, findSQL, id, typeName)
-	err := row.Scan(&found)
+	err := row.Scan(&found.Id, &found.Type, &found.Data)
 
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalf("ERROR: retrieving single staging valid: %s\n", err)
 	}
 	return found
 }
