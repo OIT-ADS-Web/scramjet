@@ -31,7 +31,10 @@ func TestResourcesIngest(t *testing.T) {
 
 	// mark them so we know they are processed and okay to go
 	// into resources table
-	sj.BatchMarkValidInStaging(valid)
+	err = sj.BatchMarkValidInStaging(valid)
+	if err != nil {
+		t.Error("error marking records valid")
+	}
 	list := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
@@ -72,9 +75,11 @@ func TestBatchResources(t *testing.T) {
 	if len(valid) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
-	sj.BatchMarkValidInStaging(valid)
+	err = sj.BatchMarkValidInStaging(valid)
 	// should be two marked as 'valid' now
-
+	if err != nil {
+		t.Error("error marking records valid")
+	}
 	list := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
@@ -117,9 +122,11 @@ func TestBatchDeleteResources(t *testing.T) {
 	if len(valid) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
-	sj.BatchMarkValidInStaging(valid)
+	err = sj.BatchMarkValidInStaging(valid)
 	// should be two marked as 'valid' now
-
+	if err != nil {
+		t.Error("error marking records valid")
+	}
 	list := sj.RetrieveValidStaging(typeName)
 	if len(valid) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
@@ -184,9 +191,11 @@ func TestDeleteResource(t *testing.T) {
 	if len(valid) != 1 {
 		t.Error("did not retrieve 1 and only 1 record")
 	}
-	sj.BatchMarkValidInStaging(valid)
+	err = sj.BatchMarkValidInStaging(valid)
 	// should be one marked as 'valid' now
-
+	if err != nil {
+		t.Error("error marking records valid")
+	}
 	// now move to resources table since they are valid
 	list := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
