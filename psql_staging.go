@@ -226,31 +226,40 @@ func StashStaging(docs ...Storeable) error {
 	return err
 }
 
-func ProcessTypeStaging(typeName string, validator ValidatorFunc) {
+func ProcessTypeStaging(typeName string, validator ValidatorFunc) error {
 	valid, rejects := FilterTypeStaging(typeName, validator)
-	BatchMarkValidInStaging(valid)
-	BatchMarkInvalidInStaging(rejects)
+	err := BatchMarkValidInStaging(valid)
+	if err != nil {
+		return err
+	}
+	err = BatchMarkInvalidInStaging(rejects)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-// TODO: really should send back err or status or something
-func ProcessSingleStaging(item Identifiable, validator ValidatorFunc) {
+func ProcessSingleStaging(item Identifiable, validator ValidatorFunc) error {
 	id := item.Identifier()
 	// TODO: what to do if no record found?
-	res := RetrieveSingleStaging(id.Id, id.Type)
+	res, err := RetrieveSingleStaging(id.Id, id.Type)
 
+	if err != nil {
+		return err
+	}
 	valid := validator(string(res.Data))
 
 	var results = make([]Identifiable, 0)
 	results = append(results, res)
 
 	if valid {
-		BatchMarkValidInStaging(results)
+		return BatchMarkValidInStaging(results)
 	} else {
-		BatchMarkInvalidInStaging(results)
+		return BatchMarkInvalidInStaging(results)
 	}
 }
 
-func RetrieveSingleStaging(id string, typeName string) StagingResource {
+func RetrieveSingleStaging(id string, typeName string) (StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
 	var found StagingResource
@@ -266,12 +275,13 @@ func RetrieveSingleStaging(id string, typeName string) StagingResource {
 	err := row.Scan(&found.Id, &found.Type, &found.Data)
 
 	if err != nil {
-		log.Fatalf("ERROR: retrieiving single from staging: %s\n", err)
+		msg := fmt.Sprintf("ERROR: retrieiving single from staging: %s\n", err)
+		return found, errors.New(msg)
 	}
-	return found
+	return found, nil
 }
 
-func RetrieveSingleStagingValid(id string, typeName string) StagingResource {
+func RetrieveSingleStagingValid(id string, typeName string) (StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
 	var found StagingResource
@@ -285,12 +295,13 @@ func RetrieveSingleStagingValid(id string, typeName string) StagingResource {
 	err := row.Scan(&found.Id, &found.Type, &found.Data)
 
 	if err != nil {
-		log.Fatalf("ERROR: retrieving single staging valid: %s\n", err)
+		msg := fmt.Sprintf("ERROR: retrieving single staging valid: %s\n", err)
+		return found, errors.New(msg)
 	}
-	return found
+	return found, nil
 }
 
-func RetrieveSingleStagingDelete(id string, typeName string) StagingResource {
+func RetrieveSingleStagingDelete(id string, typeName string) (StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
 	var found StagingResource
@@ -303,20 +314,25 @@ func RetrieveSingleStagingDelete(id string, typeName string) StagingResource {
 	err := row.Scan(&found.Id, &found.Type, &found.Data)
 
 	if err != nil {
-		log.Fatalln(err)
+		msg := fmt.Sprintf("ERROR: retrieving single staging delete: %s\n", err)
+		return found, errors.New(msg)
 	}
-	return found
+	return found, nil
 }
 
-func BatchMarkInvalidInStaging(resources []Identifiable) {
+func BatchMarkInvalidInStaging(resources []Identifiable) error {
 	chunked := chunked(resources, 500)
 	for _, chunk := range chunked {
-		batchMarkInvalidInStaging(chunk)
+		err := batchMarkInvalidInStaging(chunk)
+		if err != nil {
+			return errors.Wrap(err, "marking invalid in staging")
+		}
 	}
+	return nil
 }
 
 // made lowercase same name to not export
-func batchMarkInvalidInStaging(resources []Identifiable) (err error) {
+func batchMarkInvalidInStaging(resources []Identifiable) error {
 	// NOTE: this would need to only do 500 at a time
 	// because of SQL IN clause limit
 	db := GetPool()
@@ -355,7 +371,7 @@ func batchMarkInvalidInStaging(resources []Identifiable) (err error) {
 
 // TODO: should probably batch these when validating and
 // mark valid, invalid in groups of 500 or something
-func MarkInvalidInStaging(res Storeable) (err error) {
+func MarkInvalidInStaging(res Storeable) error {
 	db := GetPool()
 	ctx := context.Background()
 	tx, err := db.Begin(ctx)
@@ -379,22 +395,6 @@ func MarkInvalidInStaging(res Storeable) (err error) {
 }
 
 //https://stackoverflow.com/questions/35179656/slice-chunking-in-go
-/*
-func chunkedStaging(resources []StagingResource, chunkSize int) [][]StagingResource {
-	var divided [][]StagingResource
-
-	for i := 0; i < len(resources); i += chunkSize {
-		end := i + chunkSize
-
-		if end > len(resources) {
-			end = len(resources)
-		}
-
-		divided = append(divided, resources[i:end])
-	}
-	return divided
-}
-*/
 func chunked(resources []Identifiable, chunkSize int) [][]Identifiable {
 	var divided [][]Identifiable
 
@@ -410,17 +410,20 @@ func chunked(resources []Identifiable, chunkSize int) [][]Identifiable {
 	return divided
 }
 
-func BatchMarkValidInStaging(resources []Identifiable) {
+func BatchMarkValidInStaging(resources []Identifiable) error {
+	var err error
 	chunked := chunked(resources, 500)
 	for _, chunk := range chunked {
-		err := batchMarkValidInStaging(chunk)
+		err = batchMarkValidInStaging(chunk)
 		if err != nil {
-			log.Fatalf("could not break list into chunks %v", err)
+			msg := fmt.Sprintf("could not break list into chunks %v", err)
+			return errors.New(msg)
 		}
 	}
+	return err
 }
 
-func batchMarkValidInStaging(resources []Identifiable) (err error) {
+func batchMarkValidInStaging(resources []Identifiable) error {
 	// NOTE: this would need to only do 500-750 (or so) at a time
 	// because of SQL IN clause limit of 1000
 	db := GetPool()
@@ -455,7 +458,7 @@ func batchMarkValidInStaging(resources []Identifiable) (err error) {
 	return nil
 }
 
-func MarkValidInStaging(res StagingResource) (err error) {
+func MarkValidInStaging(res StagingResource) error {
 	db := GetPool()
 	ctx := context.Background()
 	tx, err := db.Begin(ctx)
@@ -478,7 +481,7 @@ func MarkValidInStaging(res StagingResource) (err error) {
 	return nil
 }
 
-func DeleteFromStaging(res StagingResource) (err error) {
+func DeleteFromStaging(res StagingResource) error {
 	db := GetPool()
 	ctx := context.Background()
 	sql := `DELETE from staging WHERE id = $1 AND type = $2`
@@ -569,7 +572,7 @@ func DropStaging() error {
 	return nil
 }
 
-func ClearAllStaging() (err error) {
+func ClearAllStaging() error {
 	db := GetPool()
 	ctx := context.Background()
 	sql := `DELETE from staging`
@@ -589,7 +592,7 @@ func ClearAllStaging() (err error) {
 }
 
 // call where valid = true? (after transfering to resources)
-func ClearStagingType(typeName string) (err error) {
+func ClearStagingType(typeName string) error {
 	db := GetPool()
 	ctx := context.Background()
 	sql := `DELETE from staging`
@@ -613,7 +616,7 @@ func ClearStagingType(typeName string) (err error) {
 }
 
 // leave the is_valid = false for investigation
-func ClearStagingTypeValid(typeName string) (err error) {
+func ClearStagingTypeValid(typeName string) error {
 	db := GetPool()
 	ctx := context.Background()
 	sql := `DELETE from staging`
@@ -636,7 +639,7 @@ func ClearStagingTypeValid(typeName string) (err error) {
 	return nil
 }
 
-func ClearStagingTypeDeletes(typeName string) (err error) {
+func ClearStagingTypeDeletes(typeName string) error {
 	db := GetPool()
 	ctx := context.Background()
 	sql := `DELETE from staging`
@@ -659,7 +662,7 @@ func ClearStagingTypeDeletes(typeName string) (err error) {
 	return nil
 }
 
-func ClearDeletedFromStaging(id string, typeName string) (err error) {
+func ClearDeletedFromStaging(id string, typeName string) error {
 	db := GetPool()
 	ctx := context.Background()
 	sql := `DELETE from staging`
@@ -683,7 +686,7 @@ func ClearDeletedFromStaging(id string, typeName string) (err error) {
 }
 
 // only add (presumed existence already checked)
-func AddStagingResource(obj interface{}, id string, typeName string) (err error) {
+func AddStagingResource(obj interface{}, id string, typeName string) error {
 	db := GetPool()
 	ctx := context.Background()
 	str, err := json.Marshal(obj)
@@ -711,17 +714,15 @@ func AddStagingResource(obj interface{}, id string, typeName string) (err error)
 	return nil
 }
 
-// need for this function?
-func SaveStagingResource(obj Storeable) (err error) {
+// is there a need for this function?
+func SaveStagingResource(obj Storeable) error {
 	db := GetPool()
 	ctx := context.Background()
 	str, err := json.Marshal(obj.Object())
-	//if err != nil {
-	//	return err
-	//}
-
-	//var found StagingResource
-	//res := &StagingResource{Id: obj.Identifier(), Type: typeName, Data: str}
+	if err != nil {
+		msg := fmt.Sprintf("cannot marshal json:%s", err)
+		return errors.New(msg)
+	}
 
 	findSql := `SELECT id FROM staging
 	  WHERE (id = $1 AND type = $2)`
@@ -739,12 +740,6 @@ func SaveStagingResource(obj Storeable) (err error) {
 
 	// supposedly no-op if no problems
 	defer tx.Rollback(ctx)
-
-	//str, err := json.Marshal(obj.Object())
-	//if err != nil {
-	// return? or let continue loop
-	//	continue
-	//}
 
 	if notFoundError != nil {
 		sql := `INSERT INTO staging (id, type, data)
@@ -775,7 +770,7 @@ func SaveStagingResource(obj Storeable) (err error) {
 	return nil
 }
 
-func SaveStagingResourceDirect(res StagingResource, typeName string) (err error) {
+func SaveStagingResourceDirect(res StagingResource, typeName string) error {
 	db := GetPool()
 	ctx := context.Background()
 
@@ -876,11 +871,10 @@ func BulkAddStaging(items ...Storeable) error {
 	for _, item := range list {
 		str, err := json.Marshal(item.Object())
 		if err != nil {
-			// return? or let continue loop
+			// TODO: return err? or let continue loop
 			continue
 		}
 		res := StagingResource{Id: item.Identifier().Id, Type: item.Identifier().Type, Data: str}
-		//resources = append(resources, item)
 		resources = append(resources, res)
 	}
 
@@ -1093,6 +1087,7 @@ func BulkAddStagingForDelete(items ...Identifiable) error {
 	return nil
 }
 
+// NOTE: only used in test - for verification
 func StagingDeleteCount(typeName string) int {
 	var count int
 	ctx := context.Background()

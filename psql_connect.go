@@ -5,13 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	//"github.com/jackc/pgx"
-	"github.com/pkg/errors"
-	//"github.com/jackc/pgx"
-	//"github.com/jackc/pgx"
-	//"github.com/jackc/pgx/pgxpool"
-
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/pkg/errors"
 )
 
 var connectOnce sync.Once

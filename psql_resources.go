@@ -35,7 +35,7 @@ func (res Resource) Identifier() Identifier {
 
 // TODO: could just send in date - leave it up to library user
 // to determine how it's figured out
-func RetrieveTypeResources(typeName string) (error, []Resource) {
+func RetrieveTypeResources(typeName string) ([]Resource, error) {
 	db := GetPool()
 	resources := []Resource{}
 	ctx := context.Background()
@@ -68,9 +68,9 @@ func RetrieveTypeResources(typeName string) (error, []Resource) {
 	}
 
 	if err != nil {
-		return err, nil
+		return nil, err
 	}
-	return nil, resources
+	return resources, nil
 }
 
 func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error) {
@@ -124,7 +124,7 @@ func makeHash(text string) string {
 }
 
 // only does one at a time (not typically used)
-func SaveResource(obj Storeable) (err error) {
+func SaveResource(obj Storeable) error {
 	ctx := context.Background()
 	str, err := json.Marshal(obj.Object())
 
@@ -140,13 +140,11 @@ func SaveResource(obj Storeable) (err error) {
 	found := Resource{}
 	var data pgtype.JSON
 	var dataB pgtype.JSONB
-	//err = data.Set(obj.Data)
 	err = data.Set(str)
 
 	if err != nil {
 		return err
 	}
-	//err = dataB.Set(obj.Data)
 	err = dataB.Set(str)
 	if err != nil {
 		return err
@@ -283,7 +281,7 @@ func DropResources() error {
 	return nil
 }
 
-func ClearAllResources() (err error) {
+func ClearAllResources() error {
 	db := GetPool()
 	ctx := context.Background()
 	sql := `DELETE from resources`
@@ -305,7 +303,7 @@ func ClearAllResources() (err error) {
 	return nil
 }
 
-func ClearResourceType(typeName string) (err error) {
+func ClearResourceType(typeName string) error {
 	db := GetPool()
 	ctx := context.Background()
 	sql := `DELETE from resources`
@@ -567,7 +565,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 	return nil
 }
 
-func BatchDeleteStagingFromResources(resources ...Identifiable) (err error) {
+func BatchDeleteStagingFromResources(resources ...Identifiable) error {
 	db := GetPool()
 	ctx := context.Background()
 	chunked := chunked(resources, 500)
@@ -593,7 +591,7 @@ func BatchDeleteStagingFromResources(resources ...Identifiable) (err error) {
 }
 
 // how to enusure staging-resource IS identifiable
-func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) (err error) {
+func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) error {
 	var clauses = make([]string, 0)
 	for _, resource := range resources {
 		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
@@ -606,7 +604,7 @@ func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiab
 		%s
 	)`, inClause)
 
-	_, err = tx.Exec(ctx, sql)
+	_, err := tx.Exec(ctx, sql)
 
 	if err != nil {
 		return err
@@ -614,7 +612,7 @@ func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiab
 	return nil
 }
 
-func BatchDeleteResourcesFromResources(resources ...Identifiable) (err error) {
+func BatchDeleteResourcesFromResources(resources ...Identifiable) error {
 	db := GetPool()
 	ctx := context.Background()
 	chunked := chunked(resources, 500)
@@ -639,7 +637,7 @@ func BatchDeleteResourcesFromResources(resources ...Identifiable) (err error) {
 	return nil
 }
 
-func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) (err error) {
+func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) error {
 	var ids = make([]string, 0)
 	for _, resource := range resources {
 		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
@@ -651,7 +649,7 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifi
 		%s
 	)`, inClause)
 
-	_, err = tx.Exec(ctx, sql)
+	_, err := tx.Exec(ctx, sql)
 
 	if err != nil {
 		return err
@@ -659,9 +657,9 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifi
 	return nil
 }
 
-func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
+func BulkRemoveStagingDeletedFromResources(typeName string) error {
 	deletes := RetrieveDeletedStaging(typeName)
-	err = BatchDeleteStagingFromResources(deletes...)
+	err := BatchDeleteStagingFromResources(deletes...)
 	if err != nil {
 		return err
 	}
@@ -676,8 +674,11 @@ func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
 	return nil
 }
 
-func RemoveStagingDeletedFromResources(id string, typeName string) (err error) {
-	deleted := RetrieveSingleStagingDelete(id, typeName)
+func RemoveStagingDeletedFromResources(id string, typeName string) error {
+	deleted, err := RetrieveSingleStagingDelete(id, typeName)
+	if err != nil {
+		return err
+	}
 	err = BatchDeleteStagingFromResources(deleted)
 	if err != nil {
 		return err
@@ -729,6 +730,7 @@ func GetMaxUpdatedAt(typeName string) time.Time {
 	db := GetPool()
 	row := db.QueryRow(ctx, sql, typeName)
 	err := row.Scan(&max)
+	// TODO: return error?
 	if err != nil {
 		log.Fatalf("error checking count %v", err)
 	}

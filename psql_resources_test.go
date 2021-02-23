@@ -39,7 +39,7 @@ func TestResourcesIngest(t *testing.T) {
 		t.Error("error moving to resource table")
 	}
 	// TODO: need a better way to limit to updates
-	err, stashed := sj.RetrieveTypeResources(typeName)
+	stashed, err := sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error stashing record")
 	}
@@ -79,7 +79,7 @@ func TestBatchResources(t *testing.T) {
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
 	// false = not updates only
-	err, existing := sj.RetrieveTypeResources(typeName)
+	existing, err := sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error stashing record")
 	}
@@ -128,7 +128,7 @@ func TestBatchDeleteResources(t *testing.T) {
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
 	// make sure they made it to begin with
-	err, existing := sj.RetrieveTypeResources(typeName)
+	existing, err := sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error stashing record")
 	}
@@ -154,7 +154,7 @@ func TestBatchDeleteResources(t *testing.T) {
 		//fmt.Println("could not mark for delete")
 		t.Errorf("could not mark for delete;err=%v\n", err)
 	}
-	err, existing = sj.RetrieveTypeResources(typeName)
+	existing, err = sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error retrieving record")
 	}

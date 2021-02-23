@@ -51,7 +51,7 @@ func ProcessOutake(proc OutakeProcessConfig) error {
 		return errors.New(msg)
 	}
 	// NOTE: for comparing source data of *all* with existing *all*
-	err, resources := RetrieveTypeResources(proc.TypeName)
+	resources, err := RetrieveTypeResources(proc.TypeName)
 	if err != nil {
 		msg := fmt.Sprintf("couldn't retrieve list of %s\n", proc.TypeName)
 		return errors.New(msg)
