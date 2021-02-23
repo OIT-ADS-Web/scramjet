@@ -888,7 +888,7 @@ func BulkAddStaging(items ...Storeable) error {
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		fmt.Printf("error starting transaction =%v\n", err)
+		return errors.Wrap(err, "starting transaction")
 	}
 
 	// supposedly no-op if everything okay
@@ -916,7 +916,7 @@ func BulkAddStaging(items ...Storeable) error {
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
-		return err
+		return errors.Wrap(err, "copying into temp table")
 	}
 	sql2 := `INSERT INTO staging (id, type, data)
 	  SELECT id, type, data FROM staging_data_tmp
@@ -942,7 +942,7 @@ func BulkAddStagingResources(resources ...StagingResource) error {
 	tx, err := db.Begin(ctx)
 
 	if err != nil {
-		fmt.Printf("error starting transaction =%v\n", err)
+		return errors.Wrap(err, "starting transaction")
 	}
 
 	// supposedly no-op if everything okay
@@ -970,7 +970,7 @@ func BulkAddStagingResources(resources ...StagingResource) error {
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
-		return err
+		return errors.Wrap(err, "copying into temp table")
 	}
 	sql2 := `INSERT INTO staging (id, type, data)
 	  SELECT id, type, data FROM staging_data_tmp
@@ -1011,8 +1011,8 @@ func RetrieveDeletedStaging(typeName string) []Identifiable {
 		resources = append(resources, res)
 
 		if err != nil {
-			fmt.Printf("%s\n", err)
-			// is this the correct thing to do?
+			// TODO:  is this the correct thing to do?
+			fmt.Printf("skipping row to delete: %s\n", err)
 			continue
 		}
 	}
@@ -1042,7 +1042,7 @@ func BulkAddStagingForDelete(items ...Identifiable) error {
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		fmt.Printf("error starting transaction =%v\n", err)
+		return errors.Wrap(err, "starting transaction")
 	}
 
 	// supposedly no-op if everything okay

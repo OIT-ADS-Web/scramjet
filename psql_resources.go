@@ -370,7 +370,7 @@ func BulkAddResources(items ...Storeable) error {
 	ctx := context.Background()
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		log.Printf("error starting transaction =%v\n", err)
+		return errors.Wrap(err, "starting transaction")
 	}
 
 	// supposedly no-op if everything okay
@@ -385,7 +385,6 @@ func BulkAddResources(items ...Storeable) error {
 	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "creating temporary table")
 	}
 
@@ -396,7 +395,7 @@ func BulkAddResources(items ...Storeable) error {
 		readError := res.Data.AssignTo(&x)
 
 		if readError != nil {
-			// do something else here, mark error somewhere?
+			// TODO: okay to skip?
 			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
@@ -412,8 +411,7 @@ func BulkAddResources(items ...Storeable) error {
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
-		fmt.Printf("error=%s\n", err)
-		return err
+		return errors.Wrap(err, "copying records into into temporary table")
 	}
 
 	sqlUpsert := `INSERT INTO resources (id, type, hash, data, data_b)
@@ -424,7 +422,6 @@ func BulkAddResources(items ...Storeable) error {
 	`
 	_, err = tx.Exec(ctx, sqlUpsert)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
@@ -438,7 +435,6 @@ func BulkAddResources(items ...Storeable) error {
 
 	_, err = tx.Exec(ctx, sqlUpdates)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
@@ -484,7 +480,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		log.Printf("error starting transaction =%v\n", err)
+		return errors.Wrap(err, "starting transaction")
 	}
 
 	// supposedly no-op if everything okay
@@ -500,7 +496,6 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "creating temporary table")
 	}
 
@@ -510,7 +505,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		x := []byte{}
 		readError := res.Data.AssignTo(&x)
 		if readError != nil {
-			// do something else here, mark error somewhere?
+			// TODO: okay to skip?
 			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
@@ -518,7 +513,6 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		readError = res.DataB.AssignTo(&y)
 
 		if readError != nil {
-			// do something else here, mark error somewhere?
 			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
@@ -534,8 +528,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
-		fmt.Printf("error=%s\n", err)
-		return err
+		return errors.Wrap(err, "copying records into into temporary table")
 	}
 
 	sqlUpsert := `INSERT INTO resources (id, type, hash, data, data_b)
@@ -546,7 +539,6 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 	`
 	_, err = tx.Exec(ctx, sqlUpsert)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
@@ -561,18 +553,15 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 
 	_, err = tx.Exec(ctx, sqlUpdates)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "commit transaction")
 	}
 	err = ClearStagingTypeValid(typeName)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "clearing staging table")
 	}
 	return nil
@@ -593,12 +582,12 @@ func BatchDeleteStagingFromResources(resources ...Identifiable) (err error) {
 		// cancel entire transaction?
 		err := batchDeleteStagingFromResources(ctx, chunk, tx)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "deleting staging from resources")
 		}
 	}
 	err = tx.Commit(ctx)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "committing transaction")
 	}
 	return nil
 }
@@ -645,7 +634,7 @@ func BatchDeleteResourcesFromResources(resources ...Identifiable) (err error) {
 	}
 	err = tx.Commit(ctx)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "committing transaction")
 	}
 	return nil
 }
