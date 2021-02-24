@@ -1005,7 +1005,7 @@ func RetrieveDeletedStaging(typeName string) []Identifiable {
 		resources = append(resources, res)
 
 		if err != nil {
-			// TODO:  is this the correct thing to do?
+			// TODO:  is this the correct thing to do? return?
 			fmt.Printf("skipping row to delete: %s\n", err)
 			continue
 		}

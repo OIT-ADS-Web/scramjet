@@ -1,7 +1,6 @@
 package staging_importer_test
 
 import (
-	"fmt"
 	"testing"
 
 	sj "gitlab.oit.duke.edu/scholars/staging_importer"
@@ -22,7 +21,6 @@ func TestResourcesIngest(t *testing.T) {
 	err := sj.StashStaging(people...)
 
 	if err != nil {
-		fmt.Println("could not save")
 		t.Errorf("err=%v\n", err)
 	}
 
@@ -150,7 +148,6 @@ func TestBatchDeleteResources(t *testing.T) {
 	}
 
 	deletes := sj.RetrieveDeletedStaging(typeName)
-	//fmt.Printf("should remove %d records of type %s\n", len(deletes), typeName)
 	if len(deletes) != 2 {
 		t.Error("did not mark 2 records for delete")
 	}
@@ -158,7 +155,6 @@ func TestBatchDeleteResources(t *testing.T) {
 	// then delete
 	err = sj.BulkRemoveStagingDeletedFromResources(typeName)
 	if err != nil {
-		//fmt.Println("could not mark for delete")
 		t.Errorf("could not mark for delete;err=%v\n", err)
 	}
 	existing, err = sj.RetrieveTypeResources(typeName)
@@ -166,7 +162,6 @@ func TestBatchDeleteResources(t *testing.T) {
 		t.Error("error retrieving record")
 	}
 	if len(existing) != 0 {
-		//fmt.Printf("%#v\n", existing)
 		t.Error("after delete, should not be any records")
 	}
 }

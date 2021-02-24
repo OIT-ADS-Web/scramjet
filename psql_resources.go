@@ -393,7 +393,7 @@ func BulkAddResources(items ...Storeable) error {
 		readError := res.Data.AssignTo(&x)
 
 		if readError != nil {
-			// TODO: okay to skip?
+			// TODO: okay to skip? could add and return
 			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
@@ -503,7 +503,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		x := []byte{}
 		readError := res.Data.AssignTo(&x)
 		if readError != nil {
-			// TODO: okay to skip?
+			// TODO: okay to skip? could add and return
 			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
@@ -511,6 +511,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		readError = res.DataB.AssignTo(&y)
 
 		if readError != nil {
+			// TODO: skip? add to list and return
 			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
