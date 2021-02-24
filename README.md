@@ -22,7 +22,7 @@ import (
 ...
 
 	typeName := "person"
-    // 1) add data
+  // 1) add data
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
 	// must use anything of interface 'Storeable'
@@ -32,16 +32,16 @@ import (
 	people := []sj.Storeable{pass1, pass2}
 	err := sj.BulkAddStaging(people...)
 
-    // 2) run through a 'validator' function - would likely
-    //    be a json schema validator
+  // 2) run through a 'validator' function - would likely
+  //    be a json schema validator
 	alwaysOkay := func(json string) bool { return true }
-	list, rejects := sj.FilterTypeStaging("person", alwaysOkay)
+	list, rejects, _ := sj.FilterTypeStaging("person", alwaysOkay)
 
-    sj.BatchMarkValidInStaging(list)
-    sj.BatchMarkInValidInStaging(rejects)
+  sj.BatchMarkValidInStaging(list)
+  sj.BatchMarkInValidInStaging(rejects)
 
-    // 3) Now the valid ones are marked and ready to go into
-    //    'resource' table
+  // 3) Now the valid ones are marked and ready to go into
+  //    'resource' table
     ...
 
 

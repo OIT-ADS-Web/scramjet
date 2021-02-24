@@ -35,7 +35,7 @@ func (res Resource) Identifier() Identifier {
 
 // TODO: could just send in date - leave it up to library user
 // to determine how it's figured out
-func RetrieveTypeResources(typeName string) (error, []Resource) {
+func RetrieveTypeResources(typeName string) ([]Resource, error) {
 	db := GetPool()
 	resources := []Resource{}
 	ctx := context.Background()
@@ -68,9 +68,9 @@ func RetrieveTypeResources(typeName string) (error, []Resource) {
 	}
 
 	if err != nil {
-		return err, nil
+		return nil, err
 	}
-	return nil, resources
+	return resources, nil
 }
 
 func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error) {
@@ -124,7 +124,7 @@ func makeHash(text string) string {
 }
 
 // only does one at a time (not typically used)
-func SaveResource(obj Storeable) (err error) {
+func SaveResource(obj Storeable) error {
 	ctx := context.Background()
 	str, err := json.Marshal(obj.Object())
 
@@ -140,13 +140,11 @@ func SaveResource(obj Storeable) (err error) {
 	found := Resource{}
 	var data pgtype.JSON
 	var dataB pgtype.JSONB
-	//err = data.Set(obj.Data)
 	err = data.Set(str)
 
 	if err != nil {
 		return err
 	}
-	//err = dataB.Set(obj.Data)
 	err = dataB.Set(str)
 	if err != nil {
 		return err
@@ -283,7 +281,7 @@ func DropResources() error {
 	return nil
 }
 
-func ClearAllResources() (err error) {
+func ClearAllResources() error {
 	db := GetPool()
 	ctx := context.Background()
 	sql := `DELETE from resources`
@@ -305,7 +303,7 @@ func ClearAllResources() (err error) {
 	return nil
 }
 
-func ClearResourceType(typeName string) (err error) {
+func ClearResourceType(typeName string) error {
 	db := GetPool()
 	ctx := context.Background()
 	sql := `DELETE from resources`
@@ -370,7 +368,7 @@ func BulkAddResources(items ...Storeable) error {
 	ctx := context.Background()
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		log.Printf("error starting transaction =%v\n", err)
+		return errors.Wrap(err, "starting transaction")
 	}
 
 	// supposedly no-op if everything okay
@@ -385,7 +383,6 @@ func BulkAddResources(items ...Storeable) error {
 	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "creating temporary table")
 	}
 
@@ -396,7 +393,7 @@ func BulkAddResources(items ...Storeable) error {
 		readError := res.Data.AssignTo(&x)
 
 		if readError != nil {
-			// do something else here, mark error somewhere?
+			// TODO: okay to skip? could add and return
 			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
@@ -412,8 +409,7 @@ func BulkAddResources(items ...Storeable) error {
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
-		fmt.Printf("error=%s\n", err)
-		return err
+		return errors.Wrap(err, "copying records into into temporary table")
 	}
 
 	sqlUpsert := `INSERT INTO resources (id, type, hash, data, data_b)
@@ -424,7 +420,6 @@ func BulkAddResources(items ...Storeable) error {
 	`
 	_, err = tx.Exec(ctx, sqlUpsert)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
@@ -438,7 +433,6 @@ func BulkAddResources(items ...Storeable) error {
 
 	_, err = tx.Exec(ctx, sqlUpdates)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
@@ -484,7 +478,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		log.Printf("error starting transaction =%v\n", err)
+		return errors.Wrap(err, "starting transaction")
 	}
 
 	// supposedly no-op if everything okay
@@ -500,7 +494,6 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "creating temporary table")
 	}
 
@@ -510,7 +503,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		x := []byte{}
 		readError := res.Data.AssignTo(&x)
 		if readError != nil {
-			// do something else here, mark error somewhere?
+			// TODO: okay to skip? could add and return
 			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
@@ -518,7 +511,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		readError = res.DataB.AssignTo(&y)
 
 		if readError != nil {
-			// do something else here, mark error somewhere?
+			// TODO: skip? add to list and return
 			fmt.Printf("skipping %s:%s\n", res.Id, readError)
 			continue
 		}
@@ -534,8 +527,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
-		fmt.Printf("error=%s\n", err)
-		return err
+		return errors.Wrap(err, "copying records into into temporary table")
 	}
 
 	sqlUpsert := `INSERT INTO resources (id, type, hash, data, data_b)
@@ -546,7 +538,6 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 	`
 	_, err = tx.Exec(ctx, sqlUpsert)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
@@ -561,24 +552,21 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 
 	_, err = tx.Exec(ctx, sqlUpdates)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "move from temporary to real table")
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "commit transaction")
 	}
 	err = ClearStagingTypeValid(typeName)
 	if err != nil {
-		log.Printf("error=%s\n", err)
 		return errors.Wrap(err, "clearing staging table")
 	}
 	return nil
 }
 
-func BatchDeleteStagingFromResources(resources []Identifiable) (err error) {
+func BatchDeleteStagingFromResources(resources ...Identifiable) error {
 	db := GetPool()
 	ctx := context.Background()
 	chunked := chunked(resources, 500)
@@ -593,18 +581,18 @@ func BatchDeleteStagingFromResources(resources []Identifiable) (err error) {
 		// cancel entire transaction?
 		err := batchDeleteStagingFromResources(ctx, chunk, tx)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "deleting staging from resources")
 		}
 	}
 	err = tx.Commit(ctx)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "committing transaction")
 	}
 	return nil
 }
 
 // how to enusure staging-resource IS identifiable
-func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) (err error) {
+func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) error {
 	var clauses = make([]string, 0)
 	for _, resource := range resources {
 		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
@@ -617,7 +605,7 @@ func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiab
 		%s
 	)`, inClause)
 
-	_, err = tx.Exec(ctx, sql)
+	_, err := tx.Exec(ctx, sql)
 
 	if err != nil {
 		return err
@@ -625,7 +613,7 @@ func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiab
 	return nil
 }
 
-func BatchDeleteResourcesFromResources(resources []Identifiable) (err error) {
+func BatchDeleteResourcesFromResources(resources ...Identifiable) error {
 	db := GetPool()
 	ctx := context.Background()
 	chunked := chunked(resources, 500)
@@ -645,12 +633,12 @@ func BatchDeleteResourcesFromResources(resources []Identifiable) (err error) {
 	}
 	err = tx.Commit(ctx)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "committing transaction")
 	}
 	return nil
 }
 
-func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) (err error) {
+func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) error {
 	var ids = make([]string, 0)
 	for _, resource := range resources {
 		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
@@ -662,7 +650,7 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifi
 		%s
 	)`, inClause)
 
-	_, err = tx.Exec(ctx, sql)
+	_, err := tx.Exec(ctx, sql)
 
 	if err != nil {
 		return err
@@ -670,9 +658,9 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifi
 	return nil
 }
 
-func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
+func BulkRemoveStagingDeletedFromResources(typeName string) error {
 	deletes := RetrieveDeletedStaging(typeName)
-	err = BatchDeleteStagingFromResources(deletes)
+	err := BatchDeleteStagingFromResources(deletes...)
 	if err != nil {
 		return err
 	}
@@ -687,10 +675,30 @@ func BulkRemoveStagingDeletedFromResources(typeName string) (err error) {
 	return nil
 }
 
+func RemoveStagingDeletedFromResources(id string, typeName string) error {
+	deleted, err := RetrieveSingleStagingDelete(id, typeName)
+	if err != nil {
+		return err
+	}
+	err = BatchDeleteStagingFromResources(deleted)
+	if err != nil {
+		return err
+	}
+	// TODO: then remove from staging?  or let caller ?
+	// in theory could use to remove from solr, rdf etc...
+	// but could also use notify
+	// no errors - would catch later with 'orphan' check
+	err = ClearDeletedFromStaging(id, typeName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func BulkRemoveResources(items ...Identifiable) error {
 	// should it go to trouble of adding to staging as delete
 	// and then turn around and delete?
-	err := BatchDeleteResourcesFromResources(items)
+	err := BatchDeleteResourcesFromResources(items...)
 	if err != nil {
 		return err
 	}
@@ -723,6 +731,7 @@ func GetMaxUpdatedAt(typeName string) time.Time {
 	db := GetPool()
 	row := db.QueryRow(ctx, sql, typeName)
 	err := row.Scan(&max)
+	// TODO: return error?
 	if err != nil {
 		log.Fatalf("error checking count %v", err)
 	}

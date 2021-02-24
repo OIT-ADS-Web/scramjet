@@ -1,7 +1,6 @@
 package staging_importer_test
 
 import (
-	"fmt"
 	"testing"
 
 	sj "gitlab.oit.duke.edu/scholars/staging_importer"
@@ -22,7 +21,6 @@ func TestResourcesIngest(t *testing.T) {
 	err := sj.StashStaging(people...)
 
 	if err != nil {
-		fmt.Println("could not save")
 		t.Errorf("err=%v\n", err)
 	}
 
@@ -31,7 +29,10 @@ func TestResourcesIngest(t *testing.T) {
 
 	// mark them so we know they are processed and okay to go
 	// into resources table
-	sj.BatchMarkValidInStaging(valid)
+	err = sj.BatchMarkValidInStaging(valid)
+	if err != nil {
+		t.Error("error marking records valid")
+	}
 	list := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
@@ -39,7 +40,7 @@ func TestResourcesIngest(t *testing.T) {
 		t.Error("error moving to resource table")
 	}
 	// TODO: need a better way to limit to updates
-	err, stashed := sj.RetrieveTypeResources(typeName)
+	stashed, err := sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error stashing record")
 	}
@@ -72,14 +73,16 @@ func TestBatchResources(t *testing.T) {
 	if len(valid) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
-	sj.BatchMarkValidInStaging(valid)
+	err = sj.BatchMarkValidInStaging(valid)
 	// should be two marked as 'valid' now
-
+	if err != nil {
+		t.Error("error marking records valid")
+	}
 	list := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
 	// false = not updates only
-	err, existing := sj.RetrieveTypeResources(typeName)
+	existing, err := sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error stashing record")
 	}
@@ -117,9 +120,11 @@ func TestBatchDeleteResources(t *testing.T) {
 	if len(valid) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
-	sj.BatchMarkValidInStaging(valid)
+	err = sj.BatchMarkValidInStaging(valid)
 	// should be two marked as 'valid' now
-
+	if err != nil {
+		t.Error("error marking records valid")
+	}
 	list := sj.RetrieveValidStaging(typeName)
 	if len(valid) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
@@ -128,7 +133,7 @@ func TestBatchDeleteResources(t *testing.T) {
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
 	// make sure they made it to begin with
-	err, existing := sj.RetrieveTypeResources(typeName)
+	existing, err := sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error stashing record")
 	}
@@ -143,7 +148,6 @@ func TestBatchDeleteResources(t *testing.T) {
 	}
 
 	deletes := sj.RetrieveDeletedStaging(typeName)
-	//fmt.Printf("should remove %d records of type %s\n", len(deletes), typeName)
 	if len(deletes) != 2 {
 		t.Error("did not mark 2 records for delete")
 	}
@@ -151,15 +155,13 @@ func TestBatchDeleteResources(t *testing.T) {
 	// then delete
 	err = sj.BulkRemoveStagingDeletedFromResources(typeName)
 	if err != nil {
-		//fmt.Println("could not mark for delete")
 		t.Errorf("could not mark for delete;err=%v\n", err)
 	}
-	err, existing = sj.RetrieveTypeResources(typeName)
+	existing, err = sj.RetrieveTypeResources(typeName)
 	if err != nil {
 		t.Error("error retrieving record")
 	}
 	if len(existing) != 0 {
-		//fmt.Printf("%#v\n", existing)
 		t.Error("after delete, should not be any records")
 	}
 }
@@ -184,9 +186,11 @@ func TestDeleteResource(t *testing.T) {
 	if len(valid) != 1 {
 		t.Error("did not retrieve 1 and only 1 record")
 	}
-	sj.BatchMarkValidInStaging(valid)
+	err = sj.BatchMarkValidInStaging(valid)
 	// should be one marked as 'valid' now
-
+	if err != nil {
+		t.Error("error marking records valid")
+	}
 	// now move to resources table since they are valid
 	list := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
