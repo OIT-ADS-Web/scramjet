@@ -12,13 +12,20 @@ type ChunkableIntakeConfig struct {
 	JustTest  bool
 	TypeName  string
 	ListMaker IntakeListMaker
+	//ChunkCallback
 }
 
+type Skipped struct {
+	Identifier Identifier
+	Err        error
+}
+
+// add some callbacks?
 func IntakeInChunks(ins ChunkableIntakeConfig) error {
 	var err error
 	for i := 0; i < ins.Count; i += ins.ChunkSize {
 		// TODO: some way to print out status as running?  callback?
-		//fmt.Printf("> retrieving %d-%d of %d\n", i, i+ins.ChunkSize, ins.Count)
+
 		list, err := ins.ListMaker(i)
 		if err != nil {
 			return err
@@ -61,6 +68,7 @@ func ProcessOutake(proc OutakeProcessConfig) error {
 
 type ExistingListMaker func() (error, []Resource)
 
+/*
 func ProcessCompare(proc DiffProcessConfig) error {
 	// NOTE: idea is to compare two limited lists such as overview per duid
 	// instead of looking for *all* extra overviews
@@ -76,6 +84,7 @@ func ProcessCompare(proc DiffProcessConfig) error {
 	}
 	return flagDeletes(sourceData, resources, proc.TypeName, proc.JustTest)
 }
+*/
 
 // to look for diffs for duid (for instance) both lists have to be sent in
 type DiffProcessConfig struct {
@@ -130,7 +139,9 @@ func flagDeletes(sourceDataIds []string, existingData []Resource, typeName strin
 			return errors.New(msg)
 		}
 	} else {
+		// callback?
 		fmt.Printf("would mark these:%s\n", deletes)
 	}
+	// return counts? or entire list?
 	return nil
 }

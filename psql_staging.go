@@ -984,10 +984,11 @@ func BulkAddStagingResources(resources ...StagingResource) error {
 	return nil
 }
 
-func RetrieveDeletedStaging(typeName string) []Identifiable {
+func RetrieveDeletedStaging(typeName string) ([]Identifiable, error) {
 	db := GetPool()
 	ctx := context.Background()
 	resources := []Identifiable{}
+	var skips = make([]Skipped, 0)
 
 	sql := `SELECT id, type, data 
 	FROM staging 
@@ -1006,15 +1007,16 @@ func RetrieveDeletedStaging(typeName string) []Identifiable {
 
 		if err != nil {
 			// TODO:  is this the correct thing to do? return?
-			fmt.Printf("skipping row to delete: %s\n", err)
+			//fmt.Printf("skipping row to delete: %s\n", err)
+			skips = append(skips, Skipped{Identifier: res.Identifier(), Err: err})
 			continue
 		}
 	}
 
 	if err != nil {
-		log.Fatalln(err)
+		return resources, err
 	}
-	return resources
+	return resources, nil
 }
 
 func BulkAddStagingForDelete(items ...Identifiable) error {

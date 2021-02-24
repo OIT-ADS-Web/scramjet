@@ -147,7 +147,7 @@ func TestBatchDeleteResources(t *testing.T) {
 		t.Error("error marking records valid")
 	}
 
-	deletes := sj.RetrieveDeletedStaging(typeName)
+	deletes, _ := sj.RetrieveDeletedStaging(typeName)
 	if len(deletes) != 2 {
 		t.Error("did not mark 2 records for delete")
 	}

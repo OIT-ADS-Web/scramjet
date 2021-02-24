@@ -330,6 +330,8 @@ func ClearResourceType(typeName string) error {
 // FIXME: a lot of boilerplate code exactly the same
 func BulkAddResources(items ...Storeable) error {
 	var resources = make([]Resource, 0)
+	var skips = make([]Skipped, 0)
+
 	var err error
 	// NOTE: not sure if these are necessary
 	list := uniqueObjects(items)
@@ -394,7 +396,8 @@ func BulkAddResources(items ...Storeable) error {
 
 		if readError != nil {
 			// TODO: okay to skip? could add and return
-			fmt.Printf("skipping %s:%s\n", res.Id, readError)
+			//fmt.Printf("skipping %s:%s\n", res.Id, readError)
+			skips = append(skips, Skipped{Identifier: res.Identifier(), Err: readError})
 			continue
 		}
 		inputRows = append(inputRows, []interface{}{res.Id,
@@ -446,6 +449,8 @@ func BulkAddResources(items ...Storeable) error {
 // NOTE: only need 'typeName' param for clearing out from staging
 func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) error {
 	var resources = make([]Resource, 0)
+	var skips = make([]Skipped, 0)
+
 	var err error
 	ctx := context.Background()
 
@@ -504,7 +509,8 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		readError := res.Data.AssignTo(&x)
 		if readError != nil {
 			// TODO: okay to skip? could add and return
-			fmt.Printf("skipping %s:%s\n", res.Id, readError)
+			//fmt.Printf("skipping %s:%s\n", res.Id, readError)
+			skips = append(skips, Skipped{Identifier: res.Identifier(), Err: readError})
 			continue
 		}
 		y := []byte{}
@@ -512,7 +518,8 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 
 		if readError != nil {
 			// TODO: skip? add to list and return
-			fmt.Printf("skipping %s:%s\n", res.Id, readError)
+			//fmt.Printf("skipping %s:%s\n", res.Id, readError)
+			skips = append(skips, Skipped{Identifier: res.Identifier(), Err: readError})
 			continue
 		}
 		inputRows = append(inputRows, []interface{}{res.Id,
@@ -659,8 +666,8 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifi
 }
 
 func BulkRemoveStagingDeletedFromResources(typeName string) error {
-	deletes := RetrieveDeletedStaging(typeName)
-	err := BatchDeleteStagingFromResources(deletes...)
+	deletes, err := RetrieveDeletedStaging(typeName)
+	err = BatchDeleteStagingFromResources(deletes...)
 	if err != nil {
 		return err
 	}
