@@ -8,6 +8,10 @@ import (
 type IntakeListMaker func(int) ([]Storeable, error)
 
 type ProgressChecker func(int)
+
+type DeleteChecker func(...interface{})
+
+type JustTestingInspector func(...interface{})
 type ChunkableIntakeConfig struct {
 	Count     int
 	ChunkSize int
@@ -15,18 +19,12 @@ type ChunkableIntakeConfig struct {
 	TypeName  string
 	ListMaker IntakeListMaker
 	Progress  ProgressChecker
+	Inspector JustTestingInspector
 }
 
-type Skipped struct {
-	Identifier Identifier
-	Err        error
-}
-
-// add some callbacks?
 func IntakeInChunks(ins ChunkableIntakeConfig) error {
 	var err error
 	for i := 0; i < ins.Count; i += ins.ChunkSize {
-		// TODO: some way to print out status as running?  callback?
 		if ins.Progress != nil {
 			ins.Progress(i)
 		}
@@ -40,8 +38,9 @@ func IntakeInChunks(ins ChunkableIntakeConfig) error {
 				return err
 			}
 		} else {
-			// TODO: something better here for 'justTest'?
-			fmt.Printf("would save:%s", list)
+			if ins.Inspector != nil {
+				ins.Inspector(list)
+			}
 		}
 	}
 	return err
@@ -52,9 +51,10 @@ type OutakeProcessConfig struct {
 	TypeName  string
 	ListMaker OutakeListMaker
 	JustTest  bool
+	Checker   DeleteChecker
+	Inspector JustTestingInspector
 }
 
-// TODO: shouldn't this return error if there is a problem?
 func ProcessOutake(proc OutakeProcessConfig) error {
 	sourceData, err := proc.ListMaker()
 	if err != nil {
@@ -67,28 +67,10 @@ func ProcessOutake(proc OutakeProcessConfig) error {
 		msg := fmt.Sprintf("couldn't retrieve list of %s\n", proc.TypeName)
 		return errors.New(msg)
 	}
-	return flagDeletes(sourceData, resources, proc.TypeName, proc.JustTest)
+	return flagDeletes(sourceData, resources, proc)
 }
 
 type ExistingListMaker func() (error, []Resource)
-
-/*
-func ProcessCompare(proc DiffProcessConfig) error {
-	// NOTE: idea is to compare two limited lists such as overview per duid
-	// instead of looking for *all* extra overviews
-	sourceData, err := proc.ListMaker()
-	if err != nil {
-		msg := fmt.Sprintf("couldn't make list sent in for %s\n", proc.TypeName)
-		return errors.New(msg)
-	}
-	err, resources := proc.ExistingListMaker()
-	if err != nil {
-		msg := fmt.Sprintf("couldn't retrieve list of %s\n", proc.TypeName)
-		return errors.New(msg)
-	}
-	return flagDeletes(sourceData, resources, proc.TypeName, proc.JustTest)
-}
-*/
 
 // to look for diffs for duid (for instance) both lists have to be sent in
 type DiffProcessConfig struct {
@@ -98,7 +80,12 @@ type DiffProcessConfig struct {
 	JustTest          bool
 }
 
-func flagDeletes(sourceDataIds []string, existingData []Resource, typeName string, justTest bool) error {
+func flagDeletes(sourceDataIds []string, existingData []Resource, proc OutakeProcessConfig) error {
+	typeName := proc.TypeName
+	justTest := proc.JustTest
+	inspector := proc.Inspector
+	checker := proc.Checker
+
 	destData := make([]string, 0)
 
 	if len(sourceDataIds) == 0 && len(existingData) > 0 {
@@ -128,7 +115,11 @@ func flagDeletes(sourceDataIds []string, existingData []Resource, typeName strin
 	extras := Difference(destData, sourceDataIds)
 
 	// TODO: maybe send count as return value
-	fmt.Printf("found %d extras\n", len(extras))
+	//fmt.Printf("found %d extras\n", len(extras))
+	if checker != nil {
+		checker(extras)
+	}
+
 	deletes := make([]Identifiable, 0)
 	for _, id := range extras {
 		// how to get type?
@@ -143,8 +134,9 @@ func flagDeletes(sourceDataIds []string, existingData []Resource, typeName strin
 			return errors.New(msg)
 		}
 	} else {
-		// callback?
-		fmt.Printf("would mark these:%s\n", deletes)
+		if inspector != nil {
+			inspector(deletes)
+		}
 	}
 	// return counts? or entire list?
 	return nil
