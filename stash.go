@@ -6,13 +6,15 @@ import (
 )
 
 type IntakeListMaker func(int) ([]Storeable, error)
+
+type ProgressChecker func(int)
 type ChunkableIntakeConfig struct {
 	Count     int
 	ChunkSize int
 	JustTest  bool
 	TypeName  string
 	ListMaker IntakeListMaker
-	//ChunkCallback
+	Progress  ProgressChecker
 }
 
 type Skipped struct {
@@ -25,7 +27,9 @@ func IntakeInChunks(ins ChunkableIntakeConfig) error {
 	var err error
 	for i := 0; i < ins.Count; i += ins.ChunkSize {
 		// TODO: some way to print out status as running?  callback?
-
+		if ins.Progress != nil {
+			ins.Progress(i)
+		}
 		list, err := ins.ListMaker(i)
 		if err != nil {
 			return err
