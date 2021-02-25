@@ -9,7 +9,7 @@ type IntakeListMaker func(int) ([]Storeable, error)
 
 type ProgressChecker func(int)
 
-type DeleteChecker func(...interface{})
+type DeleteChecker func([]string)
 
 type JustTestingInspector func(...interface{})
 type ChunkableIntakeConfig struct {
