@@ -62,13 +62,12 @@ func RetrieveTypeResources(typeName string) ([]Resource, error) {
 		resources = append(resources, res)
 
 		if err != nil {
-			// is this the correct thing to do?
-			continue
+			return resources, errors.Wrap(err, "cannot scan in resource")
 		}
 	}
 
 	if err != nil {
-		return nil, err
+		return resources, err
 	}
 	return resources, nil
 }
@@ -101,13 +100,12 @@ func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error
 		resources = append(resources, res)
 
 		if err != nil {
-			// is this the correct thing to do?
-			continue
+			return resources, errors.Wrap(err, "cannot scan in resource")
 		}
 	}
 
 	if err != nil {
-		return nil, err
+		return resources, err
 	}
 	return resources, nil
 }

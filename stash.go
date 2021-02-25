@@ -46,6 +46,7 @@ func IntakeInChunks(ins ChunkableIntakeConfig) error {
 	return err
 }
 
+// maybe interface instead of func type in struct?
 type OutakeListMaker func() ([]string, error)
 type OutakeProcessConfig struct {
 	TypeName  string
@@ -114,8 +115,6 @@ func flagDeletes(sourceDataIds []string, existingData []Resource, proc OutakePro
 	}
 	extras := Difference(destData, sourceDataIds)
 
-	// TODO: maybe send count as return value
-	//fmt.Printf("found %d extras\n", len(extras))
 	if checker != nil {
 		checker(extras)
 	}
