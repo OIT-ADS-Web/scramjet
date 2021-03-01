@@ -92,9 +92,6 @@ func flagDeletes(sourceDataIds []string, existingData []Resource, proc OutakePro
 	if len(sourceDataIds) == 0 && len(existingData) > 0 {
 		msg := fmt.Sprintf("0 source records found - this would delete all %s records!\n", typeName)
 		return errors.New(msg)
-	} else if len(sourceDataIds) > 0 && len(existingData) == 0 {
-		msg := "no existing records to compare against"
-		return errors.New(msg)
 	} else if len(sourceDataIds) == 0 && len(existingData) == 0 {
 		msg := "0 record to compare on either side!"
 		return errors.New(msg)
