@@ -62,13 +62,12 @@ func RetrieveTypeResources(typeName string) ([]Resource, error) {
 		resources = append(resources, res)
 
 		if err != nil {
-			// is this the correct thing to do?
-			continue
+			return resources, errors.Wrap(err, "cannot scan in resource")
 		}
 	}
 
 	if err != nil {
-		return nil, err
+		return resources, err
 	}
 	return resources, nil
 }
@@ -101,13 +100,12 @@ func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error
 		resources = append(resources, res)
 
 		if err != nil {
-			// is this the correct thing to do?
-			continue
+			return resources, errors.Wrap(err, "cannot scan in resource")
 		}
 	}
 
 	if err != nil {
-		return nil, err
+		return resources, err
 	}
 	return resources, nil
 }
@@ -326,126 +324,10 @@ func ClearResourceType(typeName string) error {
 	return nil
 }
 
-// add many at a time (upsert) -
-// FIXME: a lot of boilerplate code exactly the same
-func BulkAddResources(items ...Storeable) error {
-	var resources = make([]Resource, 0)
-	var err error
-	// NOTE: not sure if these are necessary
-	list := uniqueObjects(items)
-
-	for _, item := range list {
-		str, err := json.Marshal(item.Object())
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		hash := makeHash(string(str))
-		var data pgtype.JSON
-		var dataB pgtype.JSONB
-
-		err = data.Set(str)
-
-		if err != nil {
-			return err
-		}
-
-		err = dataB.Set(str)
-
-		if err != nil {
-			return err
-		}
-
-		res := &Resource{Id: item.Identifier().Id,
-			Type:  item.Identifier().Type,
-			Hash:  hash,
-			Data:  data,
-			DataB: dataB}
-		resources = append(resources, *res)
-	}
-
-	db := GetPool()
-	ctx := context.Background()
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return errors.Wrap(err, "starting transaction")
-	}
-
-	// supposedly no-op if everything okay
-	defer tx.Rollback(ctx)
-	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
-	  (id text NOT NULL, type text NOT NULL, hash text NOT NULL,
-		data json NOT NULL, data_b jsonb NOT NULL,
-		PRIMARY KEY(id, type)
-	  )
-	  ON COMMIT DROP
-	`
-	_, err = tx.Exec(ctx, tmpSql)
-
-	if err != nil {
-		return errors.Wrap(err, "creating temporary table")
-	}
-
-	// NOTE: don't commit yet (see ON COMMIT DROP)
-	inputRows := [][]interface{}{}
-	for _, res := range resources {
-		x := []byte{}
-		readError := res.Data.AssignTo(&x)
-
-		if readError != nil {
-			// TODO: okay to skip? could add and return
-			fmt.Printf("skipping %s:%s\n", res.Id, readError)
-			continue
-		}
-		inputRows = append(inputRows, []interface{}{res.Id,
-			res.Type,
-			res.Hash,
-			x,
-			x})
-	}
-
-	_, err = tx.CopyFrom(ctx, pgx.Identifier{"resource_data_tmp"},
-		[]string{"id", "type", "hash", "data", "data_b"},
-		pgx.CopyFromRows(inputRows))
-
-	if err != nil {
-		return errors.Wrap(err, "copying records into into temporary table")
-	}
-
-	sqlUpsert := `INSERT INTO resources (id, type, hash, data, data_b)
-	  SELECT id, type, hash, data, data_b
-	  FROM resource_data_tmp
-		ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data,
-		   data_b = EXCLUDED.data_b, hash = EXCLUDED.hash
-	`
-	_, err = tx.Exec(ctx, sqlUpsert)
-	if err != nil {
-		return errors.Wrap(err, "move from temporary to real table")
-	}
-
-	// now flag as 'updated' if hash changed (had to split this up into two sql calls)
-	sqlUpdates := `UPDATE resources set updated_at = NOW()
-	where (id,type) in (
-		select rdt.id, rdt.type from resource_data_tmp rdt
-		join resources r on (r.id = rdt.id and r.type = rdt.type)
-		where r.hash != rdt.hash
-	)`
-
-	_, err = tx.Exec(ctx, sqlUpdates)
-	if err != nil {
-		return errors.Wrap(err, "move from temporary to real table")
-	}
-
-	err = tx.Commit(ctx)
-	if err != nil {
-		return errors.Wrap(err, "commit transaction")
-	}
-	return nil
-}
-
 // NOTE: only need 'typeName' param for clearing out from staging
 func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) error {
 	var resources = make([]Resource, 0)
+
 	var err error
 	ctx := context.Background()
 
@@ -503,17 +385,13 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		x := []byte{}
 		readError := res.Data.AssignTo(&x)
 		if readError != nil {
-			// TODO: okay to skip? could add and return
-			fmt.Printf("skipping %s:%s\n", res.Id, readError)
-			continue
+			return errors.Wrap(err, fmt.Sprintf("could not read json data:%s", res.Identifier()))
 		}
 		y := []byte{}
 		readError = res.DataB.AssignTo(&y)
 
 		if readError != nil {
-			// TODO: skip? add to list and return
-			fmt.Printf("skipping %s:%s\n", res.Id, readError)
-			continue
+			return errors.Wrap(err, fmt.Sprintf("could not read json data:%s", res.Identifier()))
 		}
 		inputRows = append(inputRows, []interface{}{res.Id,
 			res.Type,
@@ -659,8 +537,11 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifi
 }
 
 func BulkRemoveStagingDeletedFromResources(typeName string) error {
-	deletes := RetrieveDeletedStaging(typeName)
-	err := BatchDeleteStagingFromResources(deletes...)
+	deletes, err := RetrieveDeletedStaging(typeName)
+	if err != nil {
+		return err
+	}
+	err = BatchDeleteStagingFromResources(deletes...)
 	if err != nil {
 		return err
 	}

@@ -293,7 +293,7 @@ func TestBatchMarkDelete(t *testing.T) {
 		fmt.Println("could not mark for delete")
 		t.Errorf("err=%v\n", err)
 	}
-	list := sj.RetrieveDeletedStaging(typeName)
+	list, _ := sj.RetrieveDeletedStaging(typeName)
 	if len(list) != 2 {
 		t.Error("did not retrieve 2 and only 2 record (for delete)")
 	}

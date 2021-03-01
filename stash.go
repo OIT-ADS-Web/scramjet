@@ -6,19 +6,28 @@ import (
 )
 
 type IntakeListMaker func(int) ([]Storeable, error)
+
+type ProgressChecker func(int)
+
+type DeleteChecker func([]string)
+
+type JustTestingInspector func(...interface{})
 type ChunkableIntakeConfig struct {
 	Count     int
 	ChunkSize int
 	JustTest  bool
 	TypeName  string
 	ListMaker IntakeListMaker
+	Progress  ProgressChecker
+	Inspector JustTestingInspector
 }
 
 func IntakeInChunks(ins ChunkableIntakeConfig) error {
 	var err error
 	for i := 0; i < ins.Count; i += ins.ChunkSize {
-		// TODO: some way to print out status as running?  callback?
-		//fmt.Printf("> retrieving %d-%d of %d\n", i, i+ins.ChunkSize, ins.Count)
+		if ins.Progress != nil {
+			ins.Progress(i)
+		}
 		list, err := ins.ListMaker(i)
 		if err != nil {
 			return err
@@ -29,21 +38,24 @@ func IntakeInChunks(ins ChunkableIntakeConfig) error {
 				return err
 			}
 		} else {
-			// TODO: something better here for 'justTest'?
-			fmt.Printf("would save:%s", list)
+			if ins.Inspector != nil {
+				ins.Inspector(list)
+			}
 		}
 	}
 	return err
 }
 
+// maybe interface instead of func type in struct?
 type OutakeListMaker func() ([]string, error)
 type OutakeProcessConfig struct {
 	TypeName  string
 	ListMaker OutakeListMaker
 	JustTest  bool
+	Checker   DeleteChecker
+	Inspector JustTestingInspector
 }
 
-// TODO: shouldn't this return error if there is a problem?
 func ProcessOutake(proc OutakeProcessConfig) error {
 	sourceData, err := proc.ListMaker()
 	if err != nil {
@@ -56,26 +68,10 @@ func ProcessOutake(proc OutakeProcessConfig) error {
 		msg := fmt.Sprintf("couldn't retrieve list of %s\n", proc.TypeName)
 		return errors.New(msg)
 	}
-	return flagDeletes(sourceData, resources, proc.TypeName, proc.JustTest)
+	return flagDeletes(sourceData, resources, proc)
 }
 
 type ExistingListMaker func() (error, []Resource)
-
-func ProcessCompare(proc DiffProcessConfig) error {
-	// NOTE: idea is to compare two limited lists such as overview per duid
-	// instead of looking for *all* extra overviews
-	sourceData, err := proc.ListMaker()
-	if err != nil {
-		msg := fmt.Sprintf("couldn't make list sent in for %s\n", proc.TypeName)
-		return errors.New(msg)
-	}
-	err, resources := proc.ExistingListMaker()
-	if err != nil {
-		msg := fmt.Sprintf("couldn't retrieve list of %s\n", proc.TypeName)
-		return errors.New(msg)
-	}
-	return flagDeletes(sourceData, resources, proc.TypeName, proc.JustTest)
-}
 
 // to look for diffs for duid (for instance) both lists have to be sent in
 type DiffProcessConfig struct {
@@ -85,14 +81,16 @@ type DiffProcessConfig struct {
 	JustTest          bool
 }
 
-func flagDeletes(sourceDataIds []string, existingData []Resource, typeName string, justTest bool) error {
+func flagDeletes(sourceDataIds []string, existingData []Resource, proc OutakeProcessConfig) error {
+	typeName := proc.TypeName
+	justTest := proc.JustTest
+	inspector := proc.Inspector
+	checker := proc.Checker
+
 	destData := make([]string, 0)
 
 	if len(sourceDataIds) == 0 && len(existingData) > 0 {
 		msg := fmt.Sprintf("0 source records found - this would delete all %s records!\n", typeName)
-		return errors.New(msg)
-	} else if len(sourceDataIds) > 0 && len(existingData) == 0 {
-		msg := "no existing records to compare against"
 		return errors.New(msg)
 	} else if len(sourceDataIds) == 0 && len(existingData) == 0 {
 		msg := "0 record to compare on either side!"
@@ -114,8 +112,10 @@ func flagDeletes(sourceDataIds []string, existingData []Resource, typeName strin
 	}
 	extras := Difference(destData, sourceDataIds)
 
-	// TODO: maybe send count as return value
-	fmt.Printf("found %d extras\n", len(extras))
+	if checker != nil {
+		checker(extras)
+	}
+
 	deletes := make([]Identifiable, 0)
 	for _, id := range extras {
 		// how to get type?
@@ -130,7 +130,10 @@ func flagDeletes(sourceDataIds []string, existingData []Resource, typeName strin
 			return errors.New(msg)
 		}
 	} else {
-		fmt.Printf("would mark these:%s\n", deletes)
+		if inspector != nil {
+			inspector(deletes)
+		}
 	}
+	// return counts? or entire list?
 	return nil
 }

@@ -984,7 +984,7 @@ func BulkAddStagingResources(resources ...StagingResource) error {
 	return nil
 }
 
-func RetrieveDeletedStaging(typeName string) []Identifiable {
+func RetrieveDeletedStaging(typeName string) ([]Identifiable, error) {
 	db := GetPool()
 	ctx := context.Background()
 	resources := []Identifiable{}
@@ -1001,20 +1001,17 @@ func RetrieveDeletedStaging(typeName string) []Identifiable {
 		var data []byte
 
 		err = rows.Scan(&id, &typeName, &data)
+		if err != nil {
+			return resources, errors.Wrap(err, "could not read data")
+		}
 		res := StagingResource{Id: id, Type: typeName, Data: data}
 		resources = append(resources, res)
-
-		if err != nil {
-			// TODO:  is this the correct thing to do? return?
-			fmt.Printf("skipping row to delete: %s\n", err)
-			continue
-		}
 	}
 
 	if err != nil {
-		log.Fatalln(err)
+		return resources, err
 	}
-	return resources
+	return resources, nil
 }
 
 func BulkAddStagingForDelete(items ...Identifiable) error {
@@ -1028,7 +1025,6 @@ func BulkAddStagingForDelete(items ...Identifiable) error {
 		// NOTE: json cannot be blank - so passing through 'blank' json
 		blank := []byte(`{}`)
 		res := StagingResource{Id: item.Identifier().Id, Type: item.Identifier().Type, Data: blank}
-		//resources = append(resources, item)
 		resources = append(resources, res)
 	}
 
