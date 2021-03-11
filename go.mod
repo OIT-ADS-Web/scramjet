@@ -1,6 +1,6 @@
-module gitlab.oit.duke.edu/scholars/staging_importer
+module github.com/OIT-ADS-Web/scramjet
 
-go 1.12
+go 1.14
 
 require (
 	github.com/gorilla/mux v1.7.4
