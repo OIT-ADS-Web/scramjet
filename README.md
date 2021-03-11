@@ -1,6 +1,6 @@
 # Vivo Scramjet
 
-# module github.com/vivo-community/vivo scramjet ?
+# module github.com/OIT-ADS-Web/scramjet
 
 A persistent cache of arbitrary json objects associated with 
 an id, that can be validated against a service and, when valid,
@@ -17,7 +17,7 @@ deletes to that store.
 ```go
 
 import (
-	sj "gitlab.oit.duke.edu/scholars/staging_importer"
+	sj "github.com/OIT-ADS-Web/scramjet"
 )
 ...
 
@@ -53,7 +53,7 @@ import (
 ```go
 
 import (
-	sj "gitlab.oit.duke.edu/scholars/staging_importer"
+	sj "github.com/OIT-ADS-Web/scramjet"
 )
 
 ...
