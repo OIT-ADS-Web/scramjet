@@ -14,7 +14,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/namsral/flag"
-	sj "gitlab.oit.duke.edu/scholars/staging_importer"
+	sj "github.com/OIT-ADS-Web/scramjet"
 )
 
 func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {

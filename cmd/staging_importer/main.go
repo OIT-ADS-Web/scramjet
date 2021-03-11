@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/namsral/flag"
-	sj "gitlab.oit.duke.edu/scholars/staging_importer"
+	sj "github.com/OIT-ADS-Web/scramjet"
 )
 
 // make this a server?
