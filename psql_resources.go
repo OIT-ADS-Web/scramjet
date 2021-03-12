@@ -624,13 +624,13 @@ func RetrieveSingleResource(id string, typeName string) (Resource, error) {
 	ctx := context.Background()
 	var found Resource
 
-	findSQL := `SELECT id, type, data 
+	findSQL := `SELECT id, type, data, created_at, updated_at
 	  FROM resources
 	  WHERE (id = $1 AND type = $2)`
 
 	row := db.QueryRow(ctx, findSQL, id, typeName)
 
-	err := row.Scan(&found.Id, &found.Type, &found.Data)
+	err := row.Scan(&found.Id, &found.Type, &found.Data, &found.CreatedAt, &found.UpdatedAt)
 
 	if err != nil {
 		msg := fmt.Sprintf("ERROR: retrieiving single from resources: %s\n", err)

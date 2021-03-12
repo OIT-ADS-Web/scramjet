@@ -132,45 +132,6 @@ func RetrieveInvalidStaging(typeName string) []StagingResource {
 	return resources
 }
 
-/*
-func ListTypeStaging(typeName string, validator ValidatorFunc) {
-	db := GetPool()
-	ctx := context.Background()
-	resources := []StagingResource{}
-
-	// find ones not already marked invalid ?
-	sql := `SELECT id, type, data
-	FROM staging
-	WHERE type = $1
-	AND is_valid != FALSE
-	`
-	rows, err := db.Query(ctx, sql, typeName)
-
-	for rows.Next() {
-		var id string
-		var typeName string
-		var data []byte
-
-		err = rows.Scan(&id, &typeName, &data)
-		res := StagingResource{Id: id, Type: typeName, Data: data}
-		resources = append(resources, res)
-
-		if err != nil {
-			// is this the correct thing to do?
-			continue
-		}
-	}
-
-	for _, element := range resources {
-		valid := validator(string(element.Data))
-		log.Printf("%v is %t\n", element, valid)
-	}
-	if err != nil {
-		log.Fatalln(err)
-	}
-}
-*/
-
 // NOTE: this needs a 'typeName' param because it assumes validator
 // is different per type
 func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]Identifiable, []Identifiable) {
