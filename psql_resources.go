@@ -418,7 +418,7 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 		hash = EXCLUDED.hash,
 		updated_at = CASE 
 		  WHEN resources.hash != EXCLUDED.hash THEN NOW()
-		  ELSE EXCLUDED.updated_at
+		  ELSE resources.updated_at
 		END
 	`
 	_, err = tx.Exec(ctx, sqlUpsert)
