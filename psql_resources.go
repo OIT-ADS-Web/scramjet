@@ -411,24 +411,17 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 	sqlUpsert := `INSERT INTO resources (id, type, hash, data, data_b)
 	  SELECT id, type, hash, data, data_b 
 	  FROM resource_data_tmp
-		ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data, 
-		   data_b = EXCLUDED.data_b, hash = EXCLUDED.hash
+		
+	  ON CONFLICT (id, type) DO UPDATE SET 
+	    data = EXCLUDED.data, 
+		data_b = EXCLUDED.data_b, 
+		hash = EXCLUDED.hash,
+		updated_at = CASE 
+		  WHEN resources.hash != EXCLUDED.hash THEN NOW()
+		  ELSE EXCLUDED.updated_at
+		END
 	`
 	_, err = tx.Exec(ctx, sqlUpsert)
-	if err != nil {
-		return errors.Wrap(err, "move from temporary to real table")
-	}
-
-	// now flag as 'updated' if hash changed (had to split this up into two sql calls)
-	// TODO: more timezone aware
-	sqlUpdates := `UPDATE resources set updated_at = NOW()
-	where (id,type) in (
-		select rdt.id, rdt.type from resource_data_tmp rdt
-		join resources r on (r.id = rdt.id and r.type = rdt.type)
-		where r.hash != rdt.hash
-	)`
-
-	_, err = tx.Exec(ctx, sqlUpdates)
 	if err != nil {
 		return errors.Wrap(err, "move from temporary to real table")
 	}

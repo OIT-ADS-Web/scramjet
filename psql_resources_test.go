@@ -1,7 +1,9 @@
 package scramjet_test
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	sj "github.com/OIT-ADS-Web/scramjet"
 )
@@ -218,6 +220,82 @@ func TestDeleteResource(t *testing.T) {
 	count := sj.ResourceCount(typeName)
 	if count != 0 {
 		t.Error("after delete, should not be any records")
+	}
+
+}
+
+func TestMarkUpdates(t *testing.T) {
+	sj.ClearAllStaging()
+	sj.ClearAllResources()
+	typeName := "person"
+
+	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	people := []sj.Storeable{pass1}
+
+	err := sj.StashStaging(people...)
+
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+
+	alwaysOkay := func(json string) bool { return true }
+	valid, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	if len(valid) != 1 {
+		t.Error("did not retrieve 1 and only 1 record")
+	}
+	err = sj.BatchMarkValidInStaging(valid)
+	// should be one marked as 'valid' now
+	if err != nil {
+		t.Error("error marking records valid")
+	}
+	// now move to resources table since they are valid
+	list := sj.RetrieveValidStaging(typeName)
+	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
+
+	rec1, err := sj.RetrieveSingleResource("per0000001", "person")
+	fmt.Printf("res1=%s\n", rec1.UpdatedAt.Format(time.UnixDate))
+	firstUpdatedAt := rec1.UpdatedAt
+
+	if err != nil {
+		t.Error("error finding resource")
+	}
+
+	// now update - same id and type
+	time.Sleep(2 * time.Second) // sleep for 2 seconds
+
+	person2 := TestPerson{Id: "per0000001", Name: "Test123updated"}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	people2 := []sj.Storeable{pass2}
+
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+	err = sj.StashStaging(people2...)
+
+	valid2, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	if len(valid2) != 1 {
+		t.Error("did not retrieve 1 and only 1 record")
+	}
+	err = sj.BatchMarkValidInStaging(valid2)
+	// should be one marked as 'valid' now
+	if err != nil {
+		t.Error("error marking records valid")
+	}
+	// now move to resources table since they are valid
+	list2 := sj.RetrieveValidStaging(typeName)
+	err = sj.BulkMoveStagingTypeToResources(typeName, list2...)
+
+	rec2, err := sj.RetrieveSingleResource("per0000001", "person")
+	fmt.Printf("res2=%s\n", rec2.UpdatedAt.Format(time.UnixDate))
+	if err != nil {
+		t.Error("error finding resource")
+	}
+
+	if !rec2.UpdatedAt.After(firstUpdatedAt) {
+		msg := fmt.Sprintf("did not update resource %s < %s",
+			rec2.UpdatedAt.Format(time.UnixDate), firstUpdatedAt.Format(time.UnixDate))
+		t.Error(msg)
 	}
 
 }
