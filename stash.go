@@ -1,4 +1,4 @@
-package staging_importer
+package scramjet
 
 import (
 	"errors"

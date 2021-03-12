@@ -1,4 +1,4 @@
-package staging_importer
+package scramjet
 
 //https://siongui.github.io/2018/03/14/go-set-difference-of-two-arrays/
 func Difference(a, b []string) (diff []string) {

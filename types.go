@@ -1,4 +1,4 @@
-package staging_importer
+package scramjet
 
 type Identifier struct {
 	Id, Type string

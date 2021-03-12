@@ -5,7 +5,7 @@ version: "3"
 services:
   postgres:
     image: postgres:10.3-alpine
-    container_name: si_postgres
+    container_name: scramjet_postgres
     volumes:
       - postgres:/var/lib/postgresql/data
       - ./entry:/docker-entrypoint-initdb.d
@@ -17,7 +17,7 @@ services:
     ports:
       - '5433:5432'
     networks:
-      - si_network
+      - sj_network
 
   #importer:
   #  image: golang:1.12.1
@@ -36,12 +36,12 @@ services:
   #  links:
   #    - postgres
   #  networks:
-  #    - si_network
+  #    - sj_network
   # command: >
   #     bash -c "go run cmd/staging_import/main.go"
 
 networks:
-  si_network:
+  sj_network:
     driver: bridge
 
 volumes:

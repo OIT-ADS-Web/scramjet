@@ -1,4 +1,4 @@
-package staging_importer_test
+package scramjet_test
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	sj "gitlab.oit.duke.edu/scholars/staging_importer"
+	sj "github.com/OIT-ADS-Web/scramjet"
 )
 
 func setup() {
