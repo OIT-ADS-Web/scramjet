@@ -27,7 +27,7 @@ func TestResourcesIngest(t *testing.T) {
 	}
 
 	alwaysOkay := func(json string) bool { return true }
-	valid, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	valid, _, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
 
 	// mark them so we know they are processed and okay to go
 	// into resources table
@@ -35,7 +35,7 @@ func TestResourcesIngest(t *testing.T) {
 	if err != nil {
 		t.Error("error marking records valid")
 	}
-	list := sj.RetrieveValidStaging(typeName)
+	list, err := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
 	if err != nil {
@@ -71,7 +71,7 @@ func TestBatchResources(t *testing.T) {
 	}
 
 	alwaysOkay := func(json string) bool { return true }
-	valid, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	valid, _, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
 	if len(valid) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
@@ -80,7 +80,7 @@ func TestBatchResources(t *testing.T) {
 	if err != nil {
 		t.Error("error marking records valid")
 	}
-	list := sj.RetrieveValidStaging(typeName)
+	list, err := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
 	// false = not updates only
@@ -118,7 +118,7 @@ func TestBatchDeleteResources(t *testing.T) {
 	}
 
 	alwaysOkay := func(json string) bool { return true }
-	valid, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	valid, _, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
 	if len(valid) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
@@ -127,7 +127,7 @@ func TestBatchDeleteResources(t *testing.T) {
 	if err != nil {
 		t.Error("error marking records valid")
 	}
-	list := sj.RetrieveValidStaging(typeName)
+	list, err := sj.RetrieveValidStaging(typeName)
 	if len(valid) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
@@ -184,7 +184,7 @@ func TestDeleteResource(t *testing.T) {
 	}
 
 	alwaysOkay := func(json string) bool { return true }
-	valid, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	valid, _, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
 	if len(valid) != 1 {
 		t.Error("did not retrieve 1 and only 1 record")
 	}
@@ -194,7 +194,7 @@ func TestDeleteResource(t *testing.T) {
 		t.Error("error marking records valid")
 	}
 	// now move to resources table since they are valid
-	list := sj.RetrieveValidStaging(typeName)
+	list, err := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
 	// now it's time to delete one, same one we added - but only Id data
@@ -240,7 +240,7 @@ func TestMarkUpdates(t *testing.T) {
 	}
 
 	alwaysOkay := func(json string) bool { return true }
-	valid, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	valid, _, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
 	if len(valid) != 1 {
 		t.Error("did not retrieve 1 and only 1 record")
 	}
@@ -250,7 +250,7 @@ func TestMarkUpdates(t *testing.T) {
 		t.Error("error marking records valid")
 	}
 	// now move to resources table since they are valid
-	list := sj.RetrieveValidStaging(typeName)
+	list, err := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
 	rec1, err := sj.RetrieveSingleResource("per0000001", "person")
@@ -273,7 +273,7 @@ func TestMarkUpdates(t *testing.T) {
 	}
 	err = sj.StashStaging(people2...)
 
-	valid2, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	valid2, _, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
 	if len(valid2) != 1 {
 		t.Error("did not retrieve 1 and only 1 record")
 	}
@@ -283,7 +283,7 @@ func TestMarkUpdates(t *testing.T) {
 		t.Error("error marking records valid")
 	}
 	// now move to resources table since they are valid
-	list2 := sj.RetrieveValidStaging(typeName)
+	list2, err := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list2...)
 
 	rec2, err := sj.RetrieveSingleResource("per0000001", "person")
@@ -316,7 +316,7 @@ func TestNotMarkUpdates(t *testing.T) {
 	}
 
 	alwaysOkay := func(json string) bool { return true }
-	valid, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	valid, _, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
 	if len(valid) != 1 {
 		t.Error("did not retrieve 1 and only 1 record")
 	}
@@ -326,7 +326,7 @@ func TestNotMarkUpdates(t *testing.T) {
 		t.Error("error marking records valid")
 	}
 	// now move to resources table since they are valid
-	list := sj.RetrieveValidStaging(typeName)
+	list, err := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
 
 	rec1, err := sj.RetrieveSingleResource("per0000001", "person")
@@ -350,7 +350,7 @@ func TestNotMarkUpdates(t *testing.T) {
 	}
 	err = sj.StashStaging(people2...)
 
-	valid2, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	valid2, _, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
 	if len(valid2) != 1 {
 		t.Error("did not retrieve 1 and only 1 record")
 	}
@@ -360,7 +360,7 @@ func TestNotMarkUpdates(t *testing.T) {
 		t.Error("error marking records valid")
 	}
 	// now move to resources table since they are valid
-	list2 := sj.RetrieveValidStaging(typeName)
+	list2, err := sj.RetrieveValidStaging(typeName)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list2...)
 
 	rec2, err := sj.RetrieveSingleResource("per0000001", "person")
@@ -403,7 +403,7 @@ func TestFilteredList(t *testing.T) {
 	//filter := "data->>'externalId' = 'x200'"
 	filter := sj.Filter{Field: "externalId", Value: "x200", Compare: sj.Eq}
 	// 2. but only get one out
-	valid, _ := sj.FilterTypeStagingByQuery(typeName, filter, alwaysOkay)
+	valid, _, _ := sj.FilterTypeStagingByQuery(typeName, filter, alwaysOkay)
 	if len(valid) != 1 {
 		//fmt.Printf("%s\n", valid)
 		t.Error("did not retrieve 1 and only 1 record")
@@ -417,7 +417,7 @@ func TestFilteredList(t *testing.T) {
 
 	// now move to resources table since they are valid
 	//list2 := sj.RetrieveValidStaging(typeName)
-	list2 := sj.RetrieveValidStagingFiltered(typeName, filter)
+	list2, err := sj.RetrieveValidStagingFiltered(typeName, filter)
 	err = sj.BulkMoveStagingTypeToResources(typeName, list2...)
 
 	records, err := sj.RetrieveTypeResourcesByQuery("person", filter)

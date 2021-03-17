@@ -115,8 +115,11 @@ func TestStagingListValid(t *testing.T) {
 
 	// 2. retrieve
 	alwaysOkay := func(json string) bool { return true }
-	list, rejects := sj.FilterTypeStaging("person", alwaysOkay)
+	list, rejects, err := sj.FilterTypeStaging("person", alwaysOkay)
 
+	if err != nil {
+		t.Error("could not validate list")
+	}
 	t.Logf("list=%v\n", list)
 	t.Logf("rejects=%v\n", rejects)
 	// NOTE: not marked in db column yet
@@ -139,8 +142,10 @@ func TestStagingListInValid(t *testing.T) {
 	}
 	// 2. retrieve
 	alwaysOkay := func(json string) bool { return false }
-	list, rejects := sj.FilterTypeStaging("person", alwaysOkay)
-
+	list, rejects, err := sj.FilterTypeStaging("person", alwaysOkay)
+	if err != nil {
+		t.Error("could not validate list")
+	}
 	t.Logf("list=%v\n", list)
 	t.Logf("rejects=%v\n", rejects)
 	// NOTE: not marked in db column yet
@@ -167,8 +172,11 @@ func TestBulkAdd(t *testing.T) {
 		t.Errorf("err=%v\n", err)
 	}
 	alwaysOkay := func(json string) bool { return true }
-	list, rejects := sj.FilterTypeStaging("person", alwaysOkay)
+	list, rejects, err := sj.FilterTypeStaging("person", alwaysOkay)
 
+	if err != nil {
+		t.Error("could not validate list")
+	}
 	t.Logf("list=%v\n", list)
 	t.Logf("rejects=%v\n", rejects)
 	// NOTE: not marked in db column yet
@@ -195,7 +203,11 @@ func TestTypicalUsage(t *testing.T) {
 		t.Errorf("err=%v\n", err)
 	}
 
-	all := sj.RetrieveTypeStaging(typeName)
+	all, err := sj.RetrieveTypeStaging(typeName)
+	if err != nil {
+		t.Errorf("coud not get list from staging;err=%v\n", err)
+	}
+
 	if len(all) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
@@ -224,7 +236,7 @@ func TestBatchValid(t *testing.T) {
 	}
 
 	alwaysOkay := func(json string) bool { return true }
-	valid, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	valid, _, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
 	if len(valid) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
@@ -233,7 +245,7 @@ func TestBatchValid(t *testing.T) {
 		t.Error("error marking records valid")
 	}
 	// should be two marked as 'valid' now
-	list := sj.RetrieveValidStaging(typeName)
+	list, err := sj.RetrieveValidStaging(typeName)
 	if len(list) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
@@ -258,14 +270,14 @@ func TestBatchInValid(t *testing.T) {
 	}
 
 	alwaysBad := func(json string) bool { return false }
-	_, rejects := sj.FilterTypeStaging(typeName, alwaysBad)
+	_, rejects, _ := sj.FilterTypeStaging(typeName, alwaysBad)
 	if len(rejects) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
 
 	sj.BatchMarkInvalidInStaging(rejects)
 	// should be two marked as 'valid' now
-	list := sj.RetrieveInvalidStaging(typeName)
+	list, err := sj.RetrieveInvalidStaging(typeName)
 	if len(list) != 2 {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
@@ -289,7 +301,7 @@ func TestBatchMarkDelete(t *testing.T) {
 		t.Errorf("err=%v\n", err)
 	}
 	alwaysOkay := func(json string) bool { return true }
-	valid, _ := sj.FilterTypeStaging("person", alwaysOkay)
+	valid, _, err := sj.FilterTypeStaging("person", alwaysOkay)
 	// should be no rejects
 
 	// NOTE: just immediately marking for delete

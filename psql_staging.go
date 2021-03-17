@@ -52,7 +52,7 @@ func ScanStaging(rows pgx.Rows) ([]StagingResource, error) {
 }
 
 // Staging ...
-func RetrieveTypeStagingFiltered(typeName string, filter Filter) []StagingResource {
+func RetrieveTypeStagingFiltered(typeName string, filter Filter) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
 
@@ -66,14 +66,15 @@ func RetrieveTypeStagingFiltered(typeName string, filter Filter) []StagingResour
 
 	rows, err := db.Query(ctx, sql, typeName)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
+		//log.Fatalln(err)
 	}
-	resources, err := ScanStaging(rows)
-	return resources
+	return ScanStaging(rows)
+	//return resources
 }
 
 // FIXME: should probably return error
-func RetrieveTypeStaging(typeName string) []StagingResource {
+func RetrieveTypeStaging(typeName string) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
 	//resources := []StagingResource{}
@@ -86,13 +87,14 @@ func RetrieveTypeStaging(typeName string) []StagingResource {
 	`
 	rows, err := db.Query(ctx, sql, typeName)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
+		//log.Fatalln(err)
 	}
-	resources, err := ScanStaging(rows)
-	return resources
+	return ScanStaging(rows)
+	//return resources
 }
 
-func RetrieveValidStaging(typeName string) []StagingResource {
+func RetrieveValidStaging(typeName string) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
 	//resources := []StagingResource{}
@@ -105,16 +107,14 @@ func RetrieveValidStaging(typeName string) []StagingResource {
 	AND is_valid = TRUE
 	`
 	rows, err := db.Query(ctx, sql, typeName)
-	// FIXME: return error
-	resources, err := ScanStaging(rows)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
-	return resources
+	return ScanStaging(rows)
 }
 
 // FIXME: various boilerplate repated
-func RetrieveValidStagingFiltered(typeName string, filter Filter) []StagingResource {
+func RetrieveValidStagingFiltered(typeName string, filter Filter) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
 
@@ -128,15 +128,15 @@ func RetrieveValidStagingFiltered(typeName string, filter Filter) []StagingResou
 	`, buildStagingFilterSql(filter))
 
 	rows, err := db.Query(ctx, sql, typeName)
-	// FIXME: return error
-	resources, err := ScanStaging(rows)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
-	return resources
+	// FIXME: return error
+	return ScanStaging(rows)
+	//return resources
 }
 
-func RetrieveInvalidStaging(typeName string) []StagingResource {
+func RetrieveInvalidStaging(typeName string) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
 	//resources := []StagingResource{}
@@ -149,16 +149,17 @@ func RetrieveInvalidStaging(typeName string) []StagingResource {
 	AND is_valid = FALSE
 	`
 	rows, err := db.Query(ctx, sql, typeName)
-	resources, err := ScanStaging(rows)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
-	return resources
+	return ScanStaging(rows)
+	//return resources
 }
 
 // NOTE: this needs a 'typeName' param because it assumes validator
 // is different per type
-func FilterTypeStagingByQuery(typeName string, filter Filter, validator ValidatorFunc) ([]Identifiable, []Identifiable) {
+func FilterTypeStagingByQuery(typeName string,
+	filter Filter, validator ValidatorFunc) ([]Identifiable, []Identifiable, error) {
 	db := GetPool()
 	ctx := context.Background()
 	//resources := []StagingResource{}
@@ -176,10 +177,16 @@ func FilterTypeStagingByQuery(typeName string, filter Filter, validator Validato
 
 	// TODO: would like a way to enable log.debug
 	//fmt.Printf("running sql=%s\n", sql)
+	// return  errors?
 	rows, err := db.Query(ctx, sql, typeName)
+	if err != nil {
+		return results, rejects, err
+		//log.Fatalln(err)
+	}
 	resources, err := ScanStaging(rows)
 	if err != nil {
-		log.Fatalln(err)
+		//log.Fatalln(err)
+		return results, rejects, err
 	}
 
 	for _, element := range resources {
@@ -190,16 +197,17 @@ func FilterTypeStagingByQuery(typeName string, filter Filter, validator Validato
 			rejects = append(rejects, element)
 		}
 	}
-	if err != nil {
-		log.Fatalln(err)
-	}
-	return results, rejects
+	//if err != nil {
+	//	//log.Fatalln(err)
+	//	return results, rejects, err
+	//}
+	return results, rejects, nil
 }
 
-func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]Identifiable, []Identifiable) {
+func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]Identifiable, []Identifiable, error) {
 	db := GetPool()
 	ctx := context.Background()
-	resources := []StagingResource{}
+	//resources := []StagingResource{}
 
 	var results = make([]Identifiable, 0)
 	var rejects = make([]Identifiable, 0)
@@ -212,23 +220,35 @@ func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]Identifiable
 	`
 
 	rows, err := db.Query(ctx, sql, typeName)
-
-	// NOTE: sqlx reads straight into array of structs
-	// is kind of easier
-	for rows.Next() {
-		var id string
-		var typeName string
-		var data []byte
-
-		err = rows.Scan(&id, &typeName, &data)
-		res := StagingResource{Id: id, Type: typeName, Data: data}
-		resources = append(resources, res)
-
-		if err != nil {
-			// is this the correct thing to do?
-			continue
-		}
+	if err != nil {
+		return results, rejects, err
+		//log.Fatalln(err)
 	}
+
+	resources, err := ScanStaging(rows)
+	if err != nil {
+		//log.Fatalln(err)
+		return results, rejects, err
+	}
+
+	/*
+		// NOTE: sqlx reads straight into array of structs
+		// is kind of easier
+		for rows.Next() {
+			var id string
+			var typeName string
+			var data []byte
+
+			err = rows.Scan(&id, &typeName, &data)
+			res := StagingResource{Id: id, Type: typeName, Data: data}
+			resources = append(resources, res)
+
+			if err != nil {
+				// is this the correct thing to do?
+				continue
+			}
+		}
+	*/
 
 	for _, element := range resources {
 		valid := validator(string(element.Data))
@@ -238,10 +258,11 @@ func FilterTypeStaging(typeName string, validator ValidatorFunc) ([]Identifiable
 			rejects = append(rejects, element)
 		}
 	}
-	if err != nil {
-		log.Fatalln(err)
-	}
-	return results, rejects
+	//if err != nil {
+	//	return results, rejects, err
+	//log.Fatalln(err)
+	//}
+	return results, rejects, nil
 }
 
 func StashStaging(docs ...Storeable) error {
@@ -251,9 +272,12 @@ func StashStaging(docs ...Storeable) error {
 
 // TODO: no test for this so far
 func ProcessTypeStagingFiltered(typeName string, filter Filter, validator ValidatorFunc) error {
-	valid, rejects := FilterTypeStagingByQuery(typeName, filter, validator)
+	valid, rejects, err := FilterTypeStagingByQuery(typeName, filter, validator)
+	if err != nil {
+		return err
+	}
 
-	err := BatchMarkValidInStaging(valid)
+	err = BatchMarkValidInStaging(valid)
 	if err != nil {
 		return err
 	}
@@ -265,8 +289,12 @@ func ProcessTypeStagingFiltered(typeName string, filter Filter, validator Valida
 }
 
 func ProcessTypeStaging(typeName string, validator ValidatorFunc) error {
-	valid, rejects := FilterTypeStaging(typeName, validator)
-	err := BatchMarkValidInStaging(valid)
+	valid, rejects, err := FilterTypeStaging(typeName, validator)
+	if err != nil {
+		return err
+	}
+
+	err = BatchMarkValidInStaging(valid)
 	if err != nil {
 		return err
 	}
