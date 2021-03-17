@@ -110,6 +110,48 @@ func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error
 	return resources, nil
 }
 
+// FIXME: boilerplate - just different query
+func RetrieveTypeResourcesByQuery(typeName string, filter string) ([]Resource, error) {
+	db := GetPool()
+	resources := []Resource{}
+	ctx := context.Background()
+	var err error
+	sql := fmt.Sprintf(`SELECT id, type, hash, data, data_b
+		FROM resources 
+		WHERE type =  $1
+		AND %s
+		`, filter)
+
+	// TODO: would like a way to log.debug->
+	//	fmt.Printf("res-sql=%s\n", sql)
+	rows, _ := db.Query(ctx, sql, typeName)
+
+	for rows.Next() {
+		var id string
+		var typeName string
+		var hash string
+		var json pgtype.JSON
+		var jsonB pgtype.JSONB
+
+		err = rows.Scan(&id, &typeName, &hash, &json, &jsonB)
+		res := Resource{Id: id,
+			Type:  typeName,
+			Hash:  hash,
+			Data:  json,
+			DataB: jsonB}
+		resources = append(resources, res)
+
+		if err != nil {
+			return resources, errors.Wrap(err, "cannot scan in resource")
+		}
+	}
+
+	if err != nil {
+		return resources, err
+	}
+	return resources, nil
+}
+
 //https://stackoverflow.com/questions/2377881/how-to-get-a-md5-hash-from-a-string-in-golang
 func makeHash(text string) string {
 	hasher := md5.New()

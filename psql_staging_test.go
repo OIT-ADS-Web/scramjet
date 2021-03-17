@@ -66,6 +66,12 @@ type TestPerson struct {
 	Name string `json:"name"`
 }
 
+type TestPersonExtended struct {
+	Id         string `json:"id"`
+	Name       string `json:"name"`
+	ExternalId string `json:"externalId"`
+}
+
 /*
 func (tp TestPerson) Identifier() string {
 	return tp.Id

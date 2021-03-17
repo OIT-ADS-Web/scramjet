@@ -376,3 +376,51 @@ func TestNotMarkUpdates(t *testing.T) {
 	}
 
 }
+
+func TestFilteredList(t *testing.T) {
+	sj.ClearAllStaging()
+	sj.ClearAllResources()
+	typeName := "person"
+
+	person1 := TestPersonExtended{Id: "per0000001", Name: "Test1", ExternalId: "x100"}
+	person2 := TestPersonExtended{Id: "per0000002", Name: "Test2", ExternalId: "x200"}
+
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	people := []sj.Storeable{pass1, pass2}
+
+	// 1. put all in staging
+	err := sj.StashStaging(people...)
+
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+
+	alwaysOkay := func(json string) bool { return true }
+
+	// FIXME: doesn't hide implementation
+	// staging does NOT have a data_b column
+	filter := "data->>'externalId' = 'x200'"
+	// 2. but only get one out
+	valid, _ := sj.FilterTypeStagingByQuery(typeName, filter, alwaysOkay)
+	if len(valid) != 1 {
+		//fmt.Printf("%s\n", valid)
+		t.Error("did not retrieve 1 and only 1 record")
+	}
+
+	err = sj.BatchMarkValidInStaging(valid)
+	// should be one marked as 'valid' now
+	if err != nil {
+		t.Error("error marking records valid")
+	}
+
+	// now move to resources table since they are valid
+	//list2 := sj.RetrieveValidStaging(typeName)
+	list2 := sj.RetrieveValidStagingFiltered(typeName, filter)
+	err = sj.BulkMoveStagingTypeToResources(typeName, list2...)
+
+	records, err := sj.RetrieveTypeResourcesByQuery("person", filter)
+	if len(records) != 1 {
+		t.Error("did not retrieve 1 and only 1 record from resources")
+	}
+}
