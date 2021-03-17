@@ -35,3 +35,23 @@ func (ps Packet) Object() interface{} {
 }
 
 type ValidatorFunc func(json string) bool
+
+type CompareOpt string
+
+const (
+	Eq  CompareOpt = "="
+	Gt  CompareOpt = ">"
+	Lt  CompareOpt = "<"
+	Gte CompareOpt = ">="
+	Lte CompareOpt = "<="
+)
+
+type Filter struct {
+	Field   string
+	Value   string
+	Compare CompareOpt
+}
+
+// TODO: FilterChain of some sort -> ???
+// (to handle AND/OR)
+// e.g. filter1 OR filter2 AND filter3 etc...
