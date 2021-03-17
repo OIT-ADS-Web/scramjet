@@ -10,6 +10,10 @@ This makes it possible to gather some entities for ingest into
 a store of some sort - and be able to send only adds, updates or
 deletes to that store.
 
+** NOTE ** this is in very early development and likely to change
+substantially.  So for the time being, it is here for instructional purposes
+only, I would not recommend using it with any projects.  
+
 # as library (API)
 
 * Staging Table
@@ -68,6 +72,7 @@ import (
 
 # as executable (CLI)
 
+Have not done anything with this so far
 
 # General Idea
 
