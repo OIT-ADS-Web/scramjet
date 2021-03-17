@@ -95,7 +95,6 @@ func buildResourceFilterSql(filter Filter) string {
 	return fmt.Sprintf(`data_b->>'%s' %s '%s'`, filter.Field, filter.Compare, filter.Value)
 }
 
-// FIXME: boilerplate - just different query
 func RetrieveTypeResourcesByQuery(typeName string, filter Filter) ([]Resource, error) {
 	sql := fmt.Sprintf(`SELECT id, type, hash, data, data_b
 		FROM resources 

@@ -52,5 +52,6 @@ type Filter struct {
 	Compare CompareOpt
 }
 
-// FilterChain -> ???
-// Filter OR Filter AND Filter etc...
+// TODO: FilterChain of some sort -> ???
+// (to handle AND/OR)
+// e.g. filter1 OR filter2 AND filter3 etc...
