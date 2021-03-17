@@ -275,7 +275,7 @@ func TestBatchInValid(t *testing.T) {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
 
-	sj.BatchMarkInvalidInStaging(rejects)
+	err = sj.BatchMarkInvalidInStaging(rejects)
 	// should be two marked as 'valid' now
 	list, err := sj.RetrieveInvalidStaging(typeName)
 	if len(list) != 2 {
