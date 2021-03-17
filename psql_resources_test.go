@@ -400,7 +400,8 @@ func TestFilteredList(t *testing.T) {
 
 	// FIXME: doesn't hide implementation
 	// staging does NOT have a data_b column
-	filter := "data->>'externalId' = 'x200'"
+	//filter := "data->>'externalId' = 'x200'"
+	filter := sj.Filter{Field: "externalId", Value: "x200", Compare: sj.Eq}
 	// 2. but only get one out
 	valid, _ := sj.FilterTypeStagingByQuery(typeName, filter, alwaysOkay)
 	if len(valid) != 1 {

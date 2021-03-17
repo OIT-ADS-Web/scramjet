@@ -35,16 +35,9 @@ func (res Resource) Identifier() Identifier {
 
 // TODO: could just send in date - leave it up to library user
 // to determine how it's figured out
-func RetrieveTypeResources(typeName string) ([]Resource, error) {
-	db := GetPool()
+func ScanResources(rows pgx.Rows) ([]Resource, error) {
 	resources := []Resource{}
-	ctx := context.Background()
 	var err error
-	sql := `SELECT id, type, hash, data, data_b
-		FROM resources 
-		WHERE type =  $1
-		`
-	rows, _ := db.Query(ctx, sql, typeName)
 
 	for rows.Next() {
 		var id string
@@ -72,84 +65,50 @@ func RetrieveTypeResources(typeName string) ([]Resource, error) {
 	return resources, nil
 }
 
-func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error) {
+func RetrieveTypeResources(typeName string) ([]Resource, error) {
+	sql := `SELECT id, type, hash, data, data_b
+		FROM resources 
+		WHERE type = $1
+		`
+
 	db := GetPool()
-	resources := []Resource{}
 	ctx := context.Background()
-	var err error
+	rows, _ := db.Query(ctx, sql, typeName)
+	return ScanResources(rows)
+}
+
+func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error) {
 	sql := `SELECT id, type, hash, data, data_b
 		FROM resources 
 		WHERE type =  $1
 		LIMIT $2
 		`
+	db := GetPool()
+	ctx := context.Background()
+
 	rows, _ := db.Query(ctx, sql, typeName, limit)
+	return ScanResources(rows)
+}
 
-	for rows.Next() {
-		var id string
-		var typeName string
-		var hash string
-		var json pgtype.JSON
-		var jsonB pgtype.JSONB
-
-		err = rows.Scan(&id, &typeName, &hash, &json, &jsonB)
-		res := Resource{Id: id,
-			Type:  typeName,
-			Hash:  hash,
-			Data:  json,
-			DataB: jsonB}
-		resources = append(resources, res)
-
-		if err != nil {
-			return resources, errors.Wrap(err, "cannot scan in resource")
-		}
-	}
-
-	if err != nil {
-		return resources, err
-	}
-	return resources, nil
+// TODO: probably a better way to do this
+func buildResourceFilterSql(filter Filter) string {
+	return fmt.Sprintf(`data_b->>'%s' %s '%s'`, filter.Field, filter.Compare, filter.Value)
 }
 
 // FIXME: boilerplate - just different query
-func RetrieveTypeResourcesByQuery(typeName string, filter string) ([]Resource, error) {
-	db := GetPool()
-	resources := []Resource{}
-	ctx := context.Background()
-	var err error
+func RetrieveTypeResourcesByQuery(typeName string, filter Filter) ([]Resource, error) {
 	sql := fmt.Sprintf(`SELECT id, type, hash, data, data_b
 		FROM resources 
 		WHERE type =  $1
 		AND %s
-		`, filter)
+		`, buildResourceFilterSql(filter))
+	db := GetPool()
+	ctx := context.Background()
 
 	// TODO: would like a way to log.debug->
 	//	fmt.Printf("res-sql=%s\n", sql)
 	rows, _ := db.Query(ctx, sql, typeName)
-
-	for rows.Next() {
-		var id string
-		var typeName string
-		var hash string
-		var json pgtype.JSON
-		var jsonB pgtype.JSONB
-
-		err = rows.Scan(&id, &typeName, &hash, &json, &jsonB)
-		res := Resource{Id: id,
-			Type:  typeName,
-			Hash:  hash,
-			Data:  json,
-			DataB: jsonB}
-		resources = append(resources, res)
-
-		if err != nil {
-			return resources, errors.Wrap(err, "cannot scan in resource")
-		}
-	}
-
-	if err != nil {
-		return resources, err
-	}
-	return resources, nil
+	return ScanResources(rows)
 }
 
 //https://stackoverflow.com/questions/2377881/how-to-get-a-md5-hash-from-a-string-in-golang
