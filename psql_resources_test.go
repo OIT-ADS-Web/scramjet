@@ -398,9 +398,6 @@ func TestFilteredList(t *testing.T) {
 
 	alwaysOkay := func(json string) bool { return true }
 
-	// FIXME: doesn't hide implementation
-	// staging does NOT have a data_b column
-	//filter := "data->>'externalId' = 'x200'"
 	filter := sj.Filter{Field: "externalId", Value: "x200", Compare: sj.Eq}
 	// 2. but only get one out
 	valid, _, _ := sj.FilterTypeStagingByQuery(typeName, filter, alwaysOkay)
@@ -423,5 +420,92 @@ func TestFilteredList(t *testing.T) {
 	records, err := sj.RetrieveTypeResourcesByQuery("person", filter)
 	if len(records) != 1 {
 		t.Error("did not retrieve 1 and only 1 record from resources")
+	}
+}
+
+func TestAdvancedFilteredList(t *testing.T) {
+	sj.ClearAllStaging()
+	sj.ClearAllResources()
+
+	pub1 := TestPublication{Id: "pub0001", Title: "PublicationTest"}
+	auth1 := TestAuthorship{Id: "auth0001", PublicationId: "pub0001", PersonId: "per0000001"}
+	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
+
+	pass1 := sj.Packet{Id: sj.Identifier{Id: pub1.Id, Type: "publication"}, Obj: pub1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: auth1.Id, Type: "authorship"}, Obj: auth1}
+	pass3 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: "person"}, Obj: person1}
+	records := []sj.Storeable{pass1, pass2, pass3}
+
+	// 1. put all in staging
+	err := sj.StashStaging(records...)
+
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+
+	alwaysOkay := func(json string) bool { return true }
+
+	subFilter := sj.SubFilter{Typename: "authorship",
+		MatchField:  "personId",
+		Value:       "per0000001",
+		ParentMatch: "publicationId",
+	}
+
+	filter1 := sj.Filter{Field: "id", SubFilter: &subFilter, Compare: sj.In}
+
+	// 2. but only get one out - using subfilter ...
+	valid1, _, _ := sj.FilterTypeStagingByQuery("publication", filter1, alwaysOkay)
+	if len(valid1) != 1 {
+		msg := fmt.Sprintf("did not retrieve 1 and only 1 record from staging (%d)\n", len(valid1))
+		t.Error(msg)
+	}
+
+	err = sj.BatchMarkValidInStaging(valid1)
+	// should be one marked as 'valid' now
+	if err != nil {
+		t.Error("error marking records valid")
+	}
+	// NOTE: at this point 1
+
+	// now move to resources table since they are valid
+	list1, err := sj.RetrieveValidStagingFiltered("publication", filter1)
+	if len(list1) != 1 {
+		msg := fmt.Sprintf("did not find 1 and only 1 record to move from staging (%d)\n", len(list1))
+		t.Error(msg)
+	}
+	err = sj.BulkMoveStagingTypeToResources("publication", list1...)
+	if err != nil {
+		t.Error("error moving records from staging to resources")
+	}
+
+	// NOTE: at this point there is the filtered publication list in resources
+	// but there is no 'authorship' record (yet) to verify the filter
+	filter2 := sj.Filter{Field: "personId", Value: "per0000001", Compare: sj.Eq}
+
+	valid2, _, _ := sj.FilterTypeStagingByQuery("authorship", filter2, alwaysOkay)
+	if len(valid2) != 1 {
+		msg := fmt.Sprintf("did not retrieve 1 and only 1 record from staging (%d)\n", len(valid2))
+		t.Error(msg)
+	}
+	err = sj.BatchMarkValidInStaging(valid2)
+
+	// now authorships should be marked as valid
+	list2, err := sj.RetrieveValidStagingFiltered("authorship", filter2)
+	if len(list2) != 1 {
+		msg := fmt.Sprintf("did not find 1 and only 1 record to move from staging (%d)\n", len(list2))
+		t.Error(msg)
+	}
+
+	// move over to resources ...
+	err = sj.BulkMoveStagingTypeToResources("authorship", list2...)
+	if err != nil {
+		t.Error("error moving records from staging to resources")
+	}
+
+	// 3. now finally can verify filter1 in 'resources' because authorship has made it over
+	results, err := sj.RetrieveTypeResourcesByQuery("publication", filter1)
+	if len(results) != 1 {
+		msg := fmt.Sprintf("did not retrieve 1 and only 1 record from resources (%d)\n", len(results))
+		t.Error(msg)
 	}
 }

@@ -72,6 +72,17 @@ type TestPersonExtended struct {
 	ExternalId string `json:"externalId"`
 }
 
+type TestPublication struct {
+	Id    string `json:"id"`
+	Title string `json:"title"`
+}
+
+type TestAuthorship struct {
+	Id            string `json:"id"`
+	PublicationId string `json:"publicationId"`
+	PersonId      string `json:"personId"`
+}
+
 /*
 func (tp TestPerson) Identifier() string {
 	return tp.Id

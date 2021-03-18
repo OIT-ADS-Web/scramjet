@@ -26,8 +26,27 @@ func (res StagingResource) Identifier() Identifier {
 	return Identifier{res.Id, res.Type}
 }
 
+/*
+type SubFilter struct {
+	Typename    string
+	MatchField  string
+	Value       string
+	ParentField string
+}
+*/
+
 func buildStagingFilterSql(filter Filter) string {
-	return fmt.Sprintf(`data->>'%s' %s '%s'`, filter.Field, filter.Compare, filter.Value)
+	var fragment string
+	if filter.SubFilter != nil {
+		sf := filter.SubFilter
+		subFragment := fmt.Sprintf(`SELECT data->>'%s' 
+		FROM staging 
+		WHERE type = '%s' and data->>'%s' = '%s'`, sf.ParentMatch, sf.Typename, sf.MatchField, sf.Value)
+		fragment = fmt.Sprintf(`data->>'%s' %s (%s)`, filter.Field, filter.Compare, subFragment)
+	} else {
+		fragment = fmt.Sprintf(`data->>'%s' %s '%s'`, filter.Field, filter.Compare, filter.Value)
+	}
+	return fragment
 }
 
 func ScanStaging(rows pgx.Rows) ([]StagingResource, error) {
@@ -162,7 +181,7 @@ func FilterTypeStagingByQuery(typeName string,
 	`, buildStagingFilterSql(filter))
 
 	// TODO: would like a way to enable log.debug
-	//fmt.Printf("running sql=%s\n", sql)
+	fmt.Printf("running sql=%s\n", sql)
 	rows, err := db.Query(ctx, sql, typeName)
 	if err != nil {
 		return results, rejects, err
