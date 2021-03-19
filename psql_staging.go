@@ -26,15 +26,6 @@ func (res StagingResource) Identifier() Identifier {
 	return Identifier{res.Id, res.Type}
 }
 
-/*
-type SubFilter struct {
-	Typename    string
-	MatchField  string
-	Value       string
-	ParentField string
-}
-*/
-
 func buildStagingFilterSql(filter Filter) string {
 	var fragment string
 	if filter.SubFilter != nil {
@@ -108,7 +99,6 @@ func RetrieveTypeStaging(typeName string) ([]StagingResource, error) {
 func RetrieveValidStaging(typeName string) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
-	//resources := []StagingResource{}
 
 	// NOTE: this does *not* filter by is_valid so we can try
 	// again with previously fails

@@ -104,7 +104,6 @@ func buildResourceFilterSql(filter Filter) string {
 		fragment = fmt.Sprintf(`data_b->>'%s' %s '%s'`, filter.Field, filter.Compare, filter.Value)
 	}
 	return fragment
-	//return fmt.Sprintf(`data_b->>'%s' %s '%s'`, filter.Field, filter.Compare, filter.Value)
 }
 
 func RetrieveTypeResourcesByQuery(typeName string, filter Filter) ([]Resource, error) {
@@ -116,8 +115,8 @@ func RetrieveTypeResourcesByQuery(typeName string, filter Filter) ([]Resource, e
 	db := GetPool()
 	ctx := context.Background()
 
-	// TODO: would like a way to log.debug->
-	fmt.Printf("res-sql=%s\n", sql)
+	// TODO: would like a way to log.debug the sql->
+	//fmt.Printf("res-sql=%s\n", sql)
 	rows, _ := db.Query(ctx, sql, typeName)
 	return ScanResources(rows)
 }
