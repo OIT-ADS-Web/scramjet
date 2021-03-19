@@ -473,7 +473,8 @@ func TestAdvancedFilteredList(t *testing.T) {
 		msg := fmt.Sprintf("did not find 1 and only 1 record to move from staging (%d)\n", len(list1))
 		t.Error(msg)
 	}
-	err = sj.BulkMoveStagingTypeToResources("publication", list1...)
+	err = sj.BulkMoveStagingToResourcesByFilter("publication", filter1, list1...)
+
 	if err != nil {
 		t.Error("error moving records from staging to resources")
 	}
@@ -497,9 +498,14 @@ func TestAdvancedFilteredList(t *testing.T) {
 	}
 
 	// move over to resources ...
-	err = sj.BulkMoveStagingTypeToResources("authorship", list2...)
+	err = sj.BulkMoveStagingToResourcesByFilter("authorship", filter2, list2...)
 	if err != nil {
-		t.Error("error moving records from staging to resources")
+		t.Errorf("error moving records;%s\n", err)
+	}
+	count := sj.StagingCount()
+	// NOTE: 'person' record is still in staging (have not deleted)
+	if count != 1 {
+		t.Errorf("error clearing out staging after processing - count=%d\n", count)
 	}
 
 	// 3. now finally can verify filter1 in 'resources' because authorship has made it over

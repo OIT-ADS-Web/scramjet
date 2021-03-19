@@ -96,6 +96,21 @@ func RetrieveTypeStaging(typeName string) ([]StagingResource, error) {
 	return ScanStaging(rows)
 }
 
+// just in case we need to look at all records there
+func RetrieveAllStaging() ([]StagingResource, error) {
+	db := GetPool()
+	ctx := context.Background()
+
+	// NOTE: this does *not* filter by is_valid so we can try
+	// again with previously fails
+	sql := `SELECT id, type, data FROM staging`
+	rows, err := db.Query(ctx, sql)
+	if err != nil {
+		return nil, err
+	}
+	return ScanStaging(rows)
+}
+
 func RetrieveValidStaging(typeName string) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
@@ -667,6 +682,33 @@ func ClearStagingTypeValid(typeName string) error {
 	return nil
 }
 
+func ClearStagingTypeValidByFilter(typeName string, filter Filter) error {
+	db := GetPool()
+	ctx := context.Background()
+	sql := fmt.Sprintf(`DELETE from staging
+        WHERE type = $1
+		AND is_valid = true
+		AND %s
+	`, buildStagingFilterSql(filter))
+
+	// TODO: need way to debug print
+	//fmt.Printf("trying to run sql=%s for type=%s\n", sql, typeName)
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, sql, typeName)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func ClearStagingTypeDeletes(typeName string) error {
 	db := GetPool()
 	ctx := context.Background()
@@ -1120,6 +1162,21 @@ func StagingDeleteCount(typeName string) int {
 	WHERE type = $1 and to_delete = TRUE`
 	db := GetPool()
 	row := db.QueryRow(ctx, sql, typeName)
+	err := row.Scan(&count)
+	if err != nil {
+		log.Fatalf("error checking count %v", err)
+	}
+	return count
+}
+
+// just for verification
+func StagingCount() int {
+	var count int
+	ctx := context.Background()
+	sql := `SELECT count(*) 
+	FROM staging stg`
+	db := GetPool()
+	row := db.QueryRow(ctx, sql)
 	err := row.Scan(&count)
 	if err != nil {
 		log.Fatalf("error checking count %v", err)
