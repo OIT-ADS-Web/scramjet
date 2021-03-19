@@ -92,7 +92,18 @@ func RetrieveTypeResourcesLimited(typeName string, limit int) ([]Resource, error
 
 // TODO: probably a better way to do this
 func buildResourceFilterSql(filter Filter) string {
-	return fmt.Sprintf(`data_b->>'%s' %s '%s'`, filter.Field, filter.Compare, filter.Value)
+	// mostly the same as function in staging - maybe combine?
+	var fragment string
+	if filter.SubFilter != nil {
+		sf := filter.SubFilter
+		subFragment := fmt.Sprintf(`SELECT data_b->>'%s' 
+		FROM resources 
+		WHERE type = '%s' and data_b->>'%s' = '%s'`, sf.ParentMatch, sf.Typename, sf.MatchField, sf.Value)
+		fragment = fmt.Sprintf(`data_b->>'%s' %s (%s)`, filter.Field, filter.Compare, subFragment)
+	} else {
+		fragment = fmt.Sprintf(`data_b->>'%s' %s '%s'`, filter.Field, filter.Compare, filter.Value)
+	}
+	return fragment
 }
 
 func RetrieveTypeResourcesByQuery(typeName string, filter Filter) ([]Resource, error) {
@@ -104,8 +115,8 @@ func RetrieveTypeResourcesByQuery(typeName string, filter Filter) ([]Resource, e
 	db := GetPool()
 	ctx := context.Background()
 
-	// TODO: would like a way to log.debug->
-	//	fmt.Printf("res-sql=%s\n", sql)
+	// TODO: would like a way to log.debug the sql->
+	//fmt.Printf("res-sql=%s\n", sql)
 	rows, _ := db.Query(ctx, sql, typeName)
 	return ScanResources(rows)
 }

@@ -44,12 +44,21 @@ const (
 	Lt  CompareOpt = "<"
 	Gte CompareOpt = ">="
 	Lte CompareOpt = "<="
+	In  CompareOpt = "IN"
 )
 
 type Filter struct {
-	Field   string
-	Value   string
-	Compare CompareOpt
+	Field     string
+	Value     string
+	Compare   CompareOpt
+	SubFilter *SubFilter
+}
+
+type SubFilter struct {
+	Typename    string
+	MatchField  string
+	Value       string
+	ParentMatch string /* could be different than 'Field' */
 }
 
 // TODO: FilterChain of some sort -> ???
