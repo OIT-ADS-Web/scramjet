@@ -170,8 +170,8 @@ func FilterTypeStagingByQuery(typeName string,
 	AND %s
 	`, buildStagingFilterSql(filter))
 
-	// TODO: would like a way to enable log.debug
-	fmt.Printf("running sql=%s\n", sql)
+	// TODO: way to log.debug only sql
+	//fmt.Printf("running sql=%s\n", sql)
 	rows, err := db.Query(ctx, sql, typeName)
 	if err != nil {
 		return results, rejects, err
