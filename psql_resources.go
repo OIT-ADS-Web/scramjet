@@ -335,8 +335,7 @@ func ClearResourceType(typeName string) error {
 	return nil
 }
 
-// NOTE: only need 'typeName' param for clearing out from staging
-func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) error {
+func moveStagingItemsToResources(items ...StagingResource) error {
 	var resources = make([]Resource, 0)
 
 	var err error
@@ -440,6 +439,29 @@ func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) e
 	err = tx.Commit(ctx)
 	if err != nil {
 		return errors.Wrap(err, "commit transaction")
+	}
+	return nil
+}
+
+// NOTE: still need typname to clear from staging
+func BulkMoveStagingToResourcesByFilter(typeName string, filter Filter, items ...StagingResource) error {
+	err := moveStagingItemsToResources(items...)
+	if err != nil {
+		return err
+	}
+	// now clear out staging ...
+	err = ClearStagingTypeValidByFilter(typeName, filter)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// NOTE: only need 'typeName' param for clearing out from staging
+func BulkMoveStagingTypeToResources(typeName string, items ...StagingResource) error {
+	err := moveStagingItemsToResources(items...)
+	if err != nil {
+		return err
 	}
 	err = ClearStagingTypeValid(typeName)
 	if err != nil {
