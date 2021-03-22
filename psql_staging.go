@@ -52,6 +52,7 @@ func ScanStaging(rows pgx.Rows) ([]StagingResource, error) {
 		err = rows.Scan(&id, &typeName, &data)
 		res := StagingResource{Id: id, Type: typeName, Data: data}
 		resources = append(resources, res)
+		//fmt.Printf("reading row:%#v\n", res)
 
 		if err != nil {
 			return resources, err
@@ -71,6 +72,8 @@ func RetrieveTypeStagingFiltered(typeName string, filter Filter) ([]StagingResou
 	WHERE type = $1
 	AND %s
 	`, buildStagingFilterSql(filter))
+
+	fmt.Printf("trying to run sql :%s\n", sql)
 
 	rows, err := db.Query(ctx, sql, typeName)
 	if err != nil {
@@ -361,6 +364,25 @@ func RetrieveSingleStagingDelete(id string, typeName string) (StagingResource, e
 		return found, errors.New(msg)
 	}
 	return found, nil
+}
+
+func RetrieveFilteredStagingDelete(filter Filter, typeName string) ([]StagingResource, error) {
+	db := GetPool()
+	ctx := context.Background()
+
+	findSQL := fmt.Sprintf(`SELECT id, type, data 
+	  FROM staging
+	  WHERE type = $1 
+	  --AND to_delete = true
+	  AND %s`, buildStagingFilterSql(filter))
+
+	fmt.Printf("trying to run sql:%s\n", findSQL)
+	rows, err := db.Query(ctx, findSQL, typeName)
+
+	if err != nil {
+		return nil, err
+	}
+	return ScanStaging(rows)
 }
 
 func BatchMarkInvalidInStaging(resources []Identifiable) error {
@@ -744,6 +766,32 @@ func ClearDeletedFromStaging(id string, typeName string) error {
 		return err
 	}
 	_, err = tx.Exec(ctx, sql)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ClearFilteredDeletedFromStaging(filter Filter, typeName string) error {
+	db := GetPool()
+	ctx := context.Background()
+	sql := fmt.Sprintf(`DELETE from staging
+	  WHERE type = $1
+	  AND to_delete = true
+	  AND %s`, buildStagingFilterSql(filter))
+
+	//sql += fmt.Sprintf(" WHERE id = '%s' AND type='%s' AND to_delete = TRUE", id, typeName)
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, sql, typeName)
 	if err != nil {
 		return err
 	}

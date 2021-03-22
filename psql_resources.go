@@ -509,6 +509,7 @@ func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiab
 		%s
 	)`, inClause)
 
+	fmt.Printf("trying to run sql:%s\n", sql)
 	_, err := tx.Exec(ctx, sql)
 
 	if err != nil {
@@ -576,6 +577,28 @@ func BulkRemoveStagingDeletedFromResources(typeName string) error {
 	// but could also use notify
 	// no errors - would catch later with 'orphan' check
 	err = ClearStagingTypeDeletes(typeName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func RemoveStagingDeletedFromResourcesFiltered(filter Filter, typeName string) error {
+	deleted, err := RetrieveFilteredStagingDelete(filter, typeName)
+	if err != nil {
+		return err
+	}
+	// NOTE: seem to have to copy into interface
+	deletes := []Identifiable{}
+	for _, x := range deleted {
+		deletes = append(deletes, x)
+	}
+	fmt.Printf("trying to remove %d records\n", len(deletes))
+	err = BatchDeleteStagingFromResources(deletes...)
+	if err != nil {
+		return err
+	}
+	err = ClearFilteredDeletedFromStaging(filter, typeName)
 	if err != nil {
 		return err
 	}

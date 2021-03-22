@@ -589,7 +589,6 @@ func TestDiffOutExtras(t *testing.T) {
 		t.Errorf("unable to mark records for delete:%s", err)
 	}
 
-	// then delete
 	err = sj.BulkRemoveStagingDeletedFromResources(typeName)
 
 	if err != nil {
@@ -601,3 +600,73 @@ func TestDiffOutExtras(t *testing.T) {
 		t.Errorf("after delete, should be 1 record not %d\n", count)
 	}
 }
+
+/*
+func TestRemoveByFilter(t *testing.T) {
+	sj.ClearAllStaging()
+	sj.ClearAllResources()
+
+	typeName := "authorship"
+
+	auth1 := TestAuthorship{Id: "auth0001", PublicationId: "pub0001", PersonId: "per0000001"}
+	auth2 := TestAuthorship{Id: "auth0002", PublicationId: "pub0002", PersonId: "per0000001"}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: auth1.Id, Type: "authorship"}, Obj: auth1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: auth2.Id, Type: "authorship"}, Obj: auth2}
+	authorships := []sj.Storeable{pass1, pass2}
+
+	err := sj.StashStaging(authorships...)
+
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+
+	alwaysOkay := func(json string) bool { return true }
+	valid, _, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	if len(valid) != 2 {
+		t.Error("did not retrieve 2 and only 2 record")
+	}
+	err = sj.BatchMarkValidInStaging(valid)
+	// should be two marked as 'valid' now
+	if err != nil {
+		t.Error("error marking records valid")
+	}
+	list, err := sj.RetrieveValidStaging(typeName)
+	if len(valid) != 2 {
+		t.Error("did not retrieve 2 and only 2 record")
+	}
+	// NOTE: this clears staging table
+	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
+
+	auth3 := TestAuthorship{Id: "auth0002", PublicationId: "pub0002", PersonId: "per0000001"}
+	pass3 := sj.Packet{Id: sj.Identifier{Id: "auth0002", Type: "authorship"}, Obj: auth3}
+	deletes := []sj.Identifiable{pass3}
+
+	err = sj.BulkAddStagingForDelete(deletes...)
+	if err != nil {
+		t.Errorf("error adding to staging (for delete):%s", err)
+	}
+
+	marked, _ := sj.RetrieveDeletedStaging(typeName)
+	if len(marked) != 1 {
+		t.Error("did not mark 1 records for delete")
+	}
+
+	staging, _ := sj.RetrieveAllStaging()
+	for _, stg := range staging {
+		fmt.Printf("res=%#v\n", stg)
+	}
+	//stagingCount := sj.StagingCount()
+	// NOTE: 'person' record is still in staging (have not deleted)
+	//if stagingCount != 1 {
+	//	t.Errorf("error adding delete record to staging;%d\n", stagingCount)
+	//}
+	// NOTE: the json data = {}
+	filter := sj.Filter{Field: "id", Value: "pub0002", Compare: sj.Eq}
+	// then delete
+	err = sj.RemoveStagingDeletedFromResourcesFiltered(filter, typeName)
+	count := sj.ResourceCount(typeName)
+	if count != 1 {
+		t.Errorf("after delete, should be 1 record not %d\n", count)
+	}
+}
+*/
