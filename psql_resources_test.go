@@ -515,3 +515,89 @@ func TestAdvancedFilteredList(t *testing.T) {
 		t.Error(msg)
 	}
 }
+
+func TestDiffOutExtras(t *testing.T) {
+	sj.ClearAllStaging()
+	sj.ClearAllResources()
+
+	typeName := "person"
+
+	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
+	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
+	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
+	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+	people := []sj.Storeable{pass1, pass2}
+
+	err := sj.StashStaging(people...)
+
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+
+	alwaysOkay := func(json string) bool { return true }
+	valid, _, _ := sj.FilterTypeStaging(typeName, alwaysOkay)
+	if len(valid) != 2 {
+		t.Error("did not retrieve 2 and only 2 record")
+	}
+	err = sj.BatchMarkValidInStaging(valid)
+	// should be two marked as 'valid' now
+	if err != nil {
+		t.Error("error marking records valid")
+	}
+	list, err := sj.RetrieveValidStaging(typeName)
+	if len(valid) != 2 {
+		t.Error("did not retrieve 2 and only 2 record")
+	}
+	// NOTE: this clears staging table
+	err = sj.BulkMoveStagingTypeToResources(typeName, list...)
+
+	// make sure they made it to begin with
+	existing, err := sj.RetrieveTypeResources(typeName)
+	if err != nil {
+		t.Error("error stashing record")
+	}
+	if len(existing) != 2 {
+		t.Error("did not retrieve 2 and only 2 record")
+	}
+
+	// NOW, set of 'source' list to only have one record
+	// so resources will have an 'extra' record
+	inspector := func(deletes ...interface{}) {
+		fmt.Printf("would mark these:%#v\n", deletes)
+	}
+	checker := func(extras []string) {
+		fmt.Printf("found %d extras\n", len(extras))
+		fmt.Printf("extras=%#v\n", extras)
+	}
+	listMaker := func() ([]string, error) {
+		return []string{"per0000001"}, nil
+	}
+	current := func() ([]sj.Resource, error) {
+		return sj.RetrieveTypeResources(typeName)
+	}
+	finder := sj.DiffProcessConfig{JustTest: false,
+		ListMaker:         listMaker,
+		TypeName:          typeName,
+		Inspector:         inspector,
+		Checker:           checker,
+		ExistingListMaker: current,
+	}
+	// mark them for delete
+	err = sj.ProcessDiff(finder)
+
+	if err != nil {
+		t.Errorf("unable to mark records for delete:%s", err)
+	}
+
+	// then delete
+	err = sj.BulkRemoveStagingDeletedFromResources(typeName)
+
+	if err != nil {
+		t.Errorf("unable to delete from resources:%s", err)
+	}
+	// should be one now, not two
+	count := sj.ResourceCount(typeName)
+	if count != 1 {
+		t.Errorf("after delete, should be 1 record not %d\n", count)
+	}
+}

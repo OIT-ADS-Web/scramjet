@@ -48,6 +48,10 @@ func IntakeInChunks(ins ChunkableIntakeConfig) error {
 
 // maybe interface instead of func type in struct?
 type OutakeListMaker func() ([]string, error)
+
+type ResourceListMaker func() ([]Resource, error)
+
+// NOTE: this is mostly the same as DiffProcessConfig
 type OutakeProcessConfig struct {
 	TypeName  string
 	ListMaker OutakeListMaker
@@ -56,22 +60,22 @@ type OutakeProcessConfig struct {
 	Inspector JustTestingInspector
 }
 
-func ProcessOutake(proc OutakeProcessConfig) error {
-	sourceData, err := proc.ListMaker()
-	if err != nil {
-		msg := fmt.Sprintf("couldn't make list sent in for %s\n", proc.TypeName)
-		return errors.New(msg)
-	}
+func ProcessOutake(config OutakeProcessConfig) error {
 	// NOTE: for comparing source data of *all* with existing *all*
-	resources, err := RetrieveTypeResources(proc.TypeName)
-	if err != nil {
-		msg := fmt.Sprintf("couldn't retrieve list of %s\n", proc.TypeName)
-		return errors.New(msg)
+	existing := func() ([]Resource, error) {
+		return RetrieveTypeResources(config.TypeName)
 	}
-	return flagDeletes(sourceData, resources, proc)
+	diffConfig := DiffProcessConfig{
+		TypeName:          config.TypeName,
+		ListMaker:         config.ListMaker,
+		ExistingListMaker: existing,
+		Inspector:         config.Inspector,
+		Checker:           config.Checker,
+	}
+	return ProcessDiff(diffConfig)
 }
 
-type ExistingListMaker func() (error, []Resource)
+type ExistingListMaker func() ([]Resource, error)
 
 // to look for diffs for duid (for instance) both lists have to be sent in
 type DiffProcessConfig struct {
@@ -79,13 +83,31 @@ type DiffProcessConfig struct {
 	ExistingListMaker ExistingListMaker
 	ListMaker         OutakeListMaker
 	JustTest          bool
+	Checker           DeleteChecker
+	Inspector         JustTestingInspector
 }
 
-func flagDeletes(sourceDataIds []string, existingData []Resource, proc OutakeProcessConfig) error {
-	typeName := proc.TypeName
-	justTest := proc.JustTest
-	inspector := proc.Inspector
-	checker := proc.Checker
+func ProcessDiff(config DiffProcessConfig) error {
+	sourceData, err := config.ListMaker()
+	if err != nil {
+		msg := fmt.Sprintf("couldn't make list sent in for %s\n", config.TypeName)
+		return errors.New(msg)
+	}
+
+	resources, err := config.ExistingListMaker()
+
+	if err != nil {
+		msg := fmt.Sprintf("couldn't retrieve list of %s\n", config.TypeName)
+		return errors.New(msg)
+	}
+	return FlagDeletes(sourceData, resources, config)
+}
+
+func FlagDeletes(sourceDataIds []string, existingData []Resource, config DiffProcessConfig) error {
+	typeName := config.TypeName
+	justTest := config.JustTest
+	inspector := config.Inspector
+	checker := config.Checker
 
 	destData := make([]string, 0)
 
