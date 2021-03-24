@@ -12,22 +12,20 @@ type ProgressChecker func(int)
 type DeleteChecker func([]string)
 
 type JustTestingInspector func(...interface{})
-type ChunkableIntakeConfig struct {
-	Count     int
-	ChunkSize int
-	JustTest  bool
+type IntakeConfig struct {
 	TypeName  string
 	ListMaker IntakeListMaker
-	Progress  ProgressChecker
-	Inspector JustTestingInspector
+	JustTest  bool
+	Count     int
+	ChunkSize int
 }
 
-func IntakeInChunks(ins ChunkableIntakeConfig) error {
+func IntakeInChunks(ins IntakeConfig) error {
 	var err error
+	logger := *GetConfig().Logger
 	for i := 0; i < ins.Count; i += ins.ChunkSize {
-		if ins.Progress != nil {
-			ins.Progress(i)
-		}
+		msg := fmt.Sprintf("> retrieving %d-%d of %d\n", i, i+ins.ChunkSize, ins.Count)
+		logger.Debug(msg)
 		list, err := ins.ListMaker(i)
 		if err != nil {
 			return err
@@ -38,9 +36,8 @@ func IntakeInChunks(ins ChunkableIntakeConfig) error {
 				return err
 			}
 		} else {
-			if ins.Inspector != nil {
-				ins.Inspector(list)
-			}
+			msg := fmt.Sprintf("would save:%#v\n", list)
+			logger.Info(msg)
 		}
 	}
 	return err
