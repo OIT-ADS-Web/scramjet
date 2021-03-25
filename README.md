@@ -49,7 +49,11 @@ There are two tables, `staging` and `resources`
   after importing (whether to change updated_at)
 
   * data (json representation, from staging)
-  * data_b (json representation, from staging)
+  * data_b (json representation, from staging - but binary for indexing)
+
+  See `postgresql` documentation about 
+  [json_b](https://www.postgresql.org/docs/9.4/datatype-json.html) data type
+
   * created_at (when record created)
   * updated_at (when record last updated)
 		
