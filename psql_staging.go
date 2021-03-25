@@ -19,6 +19,7 @@ type StagingResource struct {
 	Data     []byte       `db:"data"`
 	IsValid  sql.NullBool `db:"is_valid"`
 	ToDelete sql.NullBool `db:"to_delete"`
+	//TransactionId int `db:"transaction_id"`
 }
 
 // kind of like dual primary key

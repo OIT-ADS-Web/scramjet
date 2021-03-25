@@ -560,26 +560,15 @@ func TestDiffOutExtras(t *testing.T) {
 		t.Error("did not retrieve 2 and only 2 record")
 	}
 
-	// NOW, set of 'source' list to only have one record
-	// so resources will have an 'extra' record
-	inspector := func(deletes ...interface{}) {
-		fmt.Printf("would mark these:%#v\n", deletes)
-	}
-	checker := func(extras []string) {
-		fmt.Printf("found %d extras\n", len(extras))
-		fmt.Printf("extras=%#v\n", extras)
-	}
 	listMaker := func() ([]string, error) {
 		return []string{"per0000001"}, nil
 	}
 	current := func() ([]sj.Resource, error) {
 		return sj.RetrieveTypeResources(typeName)
 	}
-	finder := sj.DiffProcessConfig{JustTest: false,
+	finder := sj.DiffProcessConfig{
 		ListMaker:         listMaker,
 		TypeName:          typeName,
-		Inspector:         inspector,
-		Checker:           checker,
 		ExistingListMaker: current,
 	}
 	// mark them for delete
