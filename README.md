@@ -14,7 +14,115 @@ deletes to that store.
 substantially.  So for the time being, it is here for instructional purposes
 only, I would not recommend using it with any projects.  
 
-# as library (API)
+# General Idea (how it works)
+
+There are two tables, `staging` and `resources`
+
+* staging:
+  
+  columns:
+  * id (text - example "per000001")
+  * type (text - example "person")
+
+  Those combined are the *primary key*
+
+  * json (json representation of object)
+  * is_valid (if it's been validated)
+  * to_delete (if it's passing through as record to delete)
+
+  actions to do:
+  * stash -> put stuff in
+  * validate -> mark is_valid = (true|false)
+  * delete -> stash and to_delete = true
+
+* resources:
+  
+  columns (from staging):
+  * id (text - example "per000001")
+  * type (text - example "person")
+    
+  Those combined are the *primary key*
+
+  * hash (hash of json data)
+
+  This enables a quick determination of whether record has changed
+  after importing (whether to change updated_at)
+
+  * data (json representation, from staging)
+  * data_b (json representation, from staging)
+  * created_at (when record created)
+  * updated_at (when record last updated)
+		
+	NOTE: CONSTRAINT uniq_id_hash UNIQUE (id, type, hash)
+
+  actions:
+  * traject -> move over is_valid from staging (could be updates)
+  * list -> all, or actual updates etc...
+  * delete -> remove to_delete from staging
+
+Once a record has made it to resources, it is removed from staging
+
+# Simplest example
+
+This would be typical usage - bulk importing a type of record
+
+```go
+
+import (
+	sj "github.com/OIT-ADS-Web/scramjet"
+)
+
+...
+
+	typeName := "person"
+
+	// 1. typically would start with database list
+	dbList := func() []IntakePerson {
+		person1 := IntakePerson{Id: "per0000001", Name: "Test1"}
+		person2 := IntakePerson{Id: "per0000002", Name: "Test2"}
+		return []IntakePerson{person1, person2}
+	}
+
+  // 2. then turn into a list of 'Storeable' objects
+	listMaker := func(i int) ([]sj.Storeable, error) {
+		var people []sj.Storeable
+		for _, person := range dbList() {
+			pass := sj.MakePacket(person.Id, typeName, person)
+			people = append(people, pass)
+		}
+		return people, nil
+	}
+
+	// 3. create a validator function that validates json representation
+	alwaysOkay := func(json string) bool { return true }
+
+  // 4. then construct configs for intake, trajectory (moving from staging to resources)
+  //    and finding deletes (records in resources no longer valid)
+	intake := sj.IntakeConfig{TypeName: typeName, Count: 2, ChunkSize: 1, ListMaker: listMaker}
+	move := sj.TrajectConfig{TypeName: typeName, Validator: alwaysOkay}
+
+	// 5. this would typically be database call for all ids of 'type'
+	//     comparing against resources ids of that 'type'
+	ids := func() ([]string, error) {
+		var ids []string
+		for _, person := range dbList() {
+			ids = append(ids, person.Id)
+		}
+		return ids, nil
+	}
+	outake := sj.OutakeConfig{TypeName: typeName, ListMaker: ids}
+
+	// 6. main function does all 3 actions on data in one sequence
+	err := sj.Scramjet(intake, move, outake)
+
+  ...
+
+```
+
+# Controlling each stage of import
+
+It's also possible to do any of those stages individually, if that is more
+useful
 
 * Staging Table
 
@@ -30,6 +138,7 @@ import (
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
 	// must use anything of interface 'Storeable'
+  // there is a MakePacket wrapper
 	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
 	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
 
@@ -41,6 +150,7 @@ import (
 	alwaysOkay := func(json string) bool { return true }
 	valid, rejects, err := sj.FilterTypeStaging("person", alwaysOkay)
 
+  // 3) can mark them yourself if you want
   err = sj.BatchMarkValidInStaging(valid)
   err = sj.BatchMarkInValidInStaging(rejects)
 
@@ -70,30 +180,7 @@ import (
 
 ```
 
-# as executable (CLI)
-
-Have not done anything with this so far
-
-# General Idea
-
-two tables, `staging` and `resources`
-
-* staging: [id+type=uid]
-
-  actions:
-  * stash ->
-  * validate -> 
-  * stash and validate ->
-
-* resources: [uri(type)=uid]
-
-  actions:
-  * move over valid (could be updates)
-  * get actual updates (only)
-
-# Operations
-
-## Moving entire 'type' as bulk
+## Example moving entire 'type' as bulk, in incremental steps
 
 ```go
 
@@ -103,7 +190,6 @@ two tables, `staging` and `resources`
 
 	typeName := "person"
   // see above - gather data however it can be gathered
-	//err := sj.BulkAddStaging(people...)
   err := sj.StashStaging(people...)
   // own validator function ...
 	alwaysOkay := func(json string) bool { return true }
@@ -118,7 +204,7 @@ two tables, `staging` and `resources`
 
 ```
 
-## Moving by id (single items)
+## Example moving by id (single items)
 
 ```go
 
@@ -142,7 +228,7 @@ two tables, `staging` and `resources`
 	err = sj.BulkMoveStagingTypeToResources(typeName, staging)
 
 ```
-## Moving by query (for instance per person)
+## Example moving by query (for instance per person)
 
 ```go
 
@@ -167,13 +253,6 @@ two tables, `staging` and `resources`
 
 ```
 
-## More configurable intake
-
-For more advanced use - intake can be run as a series of chunks of input, 
-given a listmaker etc... see `ChunkableIntakeConfig`
-
-
-```
 # Basic structure
 ![image of basic structure](docs/ScramjetBasic.png "A diagram of basic ideas")
 

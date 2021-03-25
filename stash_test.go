@@ -38,7 +38,8 @@ func TestFullIntake(t *testing.T) {
 	intake := sj.IntakeConfig{TypeName: typeName, Count: 2, ChunkSize: 1, ListMaker: listMaker}
 	move := sj.TrajectConfig{TypeName: typeName, Validator: alwaysOkay}
 
-	// typically this would call source datasource for ids
+	// typically this would call source datasource for all ids of 'type'
+	// comparing against resources ids of 'type'
 	ids := func() ([]string, error) {
 		var ids []string
 		for _, person := range dbList() {
