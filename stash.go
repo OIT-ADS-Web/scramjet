@@ -19,13 +19,13 @@ type IntakeConfig struct {
 type TrajectConfig struct {
 	TypeName  string
 	Validator ValidatorFunc
-	Filter    *Filter // could this be transaction only?
+	Filter    *Filter
 }
 
 type OutakeConfig struct {
 	TypeName  string
 	ListMaker OutakeListMaker
-	Filter    *Filter // could this be transaction only? don't think so
+	Filter    *Filter
 }
 
 func Scramjet(in IntakeConfig, process TrajectConfig, out OutakeConfig) error {
