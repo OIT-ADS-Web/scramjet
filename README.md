@@ -138,6 +138,11 @@ import (
 	err := sj.ScramjetIntake(intake, move)
   
   ...
+  // then later delete
+  outake := sj.OutakeConfig{TypeName: typeName, ListMaker: ids}
+
+	err = sj.ScramjetOutake(outake)
+
 
 ```
 

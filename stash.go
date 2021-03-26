@@ -5,9 +5,11 @@ import (
 	"fmt"
 )
 
+// the parameter (int) if offset
 type IntakeListMaker func(int) ([]Storeable, error)
-type ProgressChecker func(int)
-type DeleteChecker func([]string)
+
+//type ProgressChecker func(int)
+//type DeleteChecker func([]string)
 
 type IntakeConfig struct {
 	TypeName  string
@@ -15,6 +17,26 @@ type IntakeConfig struct {
 	Count     int
 	ChunkSize int
 }
+
+/*
+func BasicIntakeConfig(typeName string, listMaker IntakeListMaker) IntakeConfig {
+	return IntakeConfig{
+		TypeName:  typeName,
+		ListMaker: listMaker,
+		Count:     0,
+		ChunkSize: 1000,
+	}
+}
+
+func ChunkedIntakeConfig(typeName string, listMaker IntakeListMaker, count int, chunkSize int) IntakeConfig {
+	return IntakeConfig{
+		TypeName:  typeName,
+		ListMaker: listMaker,
+		Count:     count,
+		ChunkSize: chunkSize,
+	}
+}
+*/
 
 type TrajectConfig struct {
 	TypeName  string
@@ -129,10 +151,13 @@ func TransferSubset(typeName string, filter Filter, validator ValidatorFunc) err
 func IntakeInChunks(ins IntakeConfig) error {
 	var err error
 	var logger = GetLogger()
-	for i := 0; i < ins.Count; i += ins.ChunkSize {
-		msg := fmt.Sprintf("> retrieving %d-%d of %d\n", i, i+ins.ChunkSize, ins.Count)
+
+	if ins.Count == 0 {
+		msg := fmt.Sprintf("> retrieving records of %s in one call\n", ins.TypeName)
 		logger.Debug(msg)
-		list, err := ins.ListMaker(i)
+		offset := 0
+		// just start at first record
+		list, err := ins.ListMaker(offset)
 		if err != nil {
 			return err
 		}
@@ -140,6 +165,23 @@ func IntakeInChunks(ins IntakeConfig) error {
 		if err != nil {
 			return err
 		}
+		msg = fmt.Sprintf("> retrieved %d records\n", len(list))
+		logger.Debug(msg)
+
+	} else {
+		for i := 0; i < ins.Count; i += ins.ChunkSize {
+			msg := fmt.Sprintf("> retrieving %d-%d of %d\n", i, i+ins.ChunkSize, ins.Count)
+			logger.Debug(msg)
+			list, err := ins.ListMaker(i)
+			if err != nil {
+				return err
+			}
+			err = BulkAddStaging(list...)
+			if err != nil {
+				return err
+			}
+		}
+		logger.Debug(fmt.Sprintf("> finished %s records\n", ins.TypeName))
 	}
 	return err
 }
