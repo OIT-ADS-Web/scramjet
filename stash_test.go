@@ -273,7 +273,7 @@ func TestRemoveByStub(t *testing.T) {
 	// should have two records now ...
 	// try removing one
 	stub := sj.MakeStub("per0000001", "person")
-	err = sj.RemoveRecord(stub)
+	err = sj.RemoveRecords(stub)
 	count := sj.ResourceCount(typeName)
 	if count != 1 {
 		t.Errorf("after remove should be 1 record - not :%d\n", count)
@@ -319,7 +319,7 @@ func TestRemoveMultiple(t *testing.T) {
 	stub2 := sj.MakeStub("per0000002", "person")
 	stubs = append(stubs, stub1, stub2)
 
-	err = sj.RemoveRecords(stubs)
+	err = sj.RemoveRecords(stubs...)
 	count := sj.ResourceCount(typeName)
 	if count != 1 {
 		t.Errorf("after remove should be 1 record - not :%d\n", count)

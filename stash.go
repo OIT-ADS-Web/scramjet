@@ -288,20 +288,13 @@ func MakePacket(id string, typeName string, obj interface{}) Packet {
 	}
 }
 
-/*
-func RemoveSpecific(id string, typeName string) error {
-	stub := MakeStub(id, typeName)
-	return RemoveStub(stub)
-}
-*/
-
 func MakeStub(id string, typeName string) Stub {
 	return Stub{
 		Id: Identifier{Id: id, Type: typeName},
 	}
 }
 
-func RemoveRecords(stubs []Stub) error {
+func RemoveRecords(stubs ...Stub) error {
 	// turn it into 'identifiable' list
 	var ids []Identifiable
 	for _, s := range stubs {
@@ -323,18 +316,5 @@ func RemoveRecords(stubs []Stub) error {
 		return errors.Wrap(err, "could not delete records from staging table")
 	}
 
-	return nil
-}
-
-func RemoveRecord(stub Stub) error {
-	err := BulkAddStagingForDelete(stub)
-	if err != nil {
-		return errors.Wrap(err, "could not mark records for delete")
-	}
-	// 2. removes from resources, then from staging
-	err = RemoveStagingDeletedFromResources(stub.Identifier().Id, stub.Identifier().Type)
-	if err != nil {
-		return errors.Wrap(err, "could not delete records")
-	}
 	return nil
 }
