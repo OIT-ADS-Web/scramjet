@@ -146,10 +146,49 @@ import (
 
 ```
 
-## One record at a time (on save/delete)
+## One record at a time (for example save/delete triggers)
+
+```golang
+
+  ...
+  // much same as above but must add a filter to the 'traject' config
+  // NOTE: can simplify intake if chunking is not necessary
+  intake := sj.IntakeConfig{TypeName: typeName, ListMaker: listMaker}
+
+  // for instance if database save/update person, id = per0000001
+  filter := sj.Filter{Field: "id", Value: "per0000001", Compare: sj.Eq}
+	move := sj.TrajectConfig{TypeName: typeName, Validator: alwaysOkay, Filter: &filter}
+
+  // this will only process based on the filter
+	err := sj.ScramjetIntake(intake, move)
+
+
+  // to delete, for instance database delete person, id = per0000001
+  stub := MakeStub("per0000001", "person")
+  err = sj.RemoveRecord(stub)
+
+  ...
+
+  // can also delete a group of stubs... e.g.
+  var deletes []sj.Stub
+  deletes = append(deletes, MakeStub("per0000001", "person"))
+  deletes = append(deletes, MakeStub("per0000002", "person"))
+
+  err = sj.RemoveRecords(deletes)
+
+```
 
 ## A group of records per person
 
+```golang
+  ...
+
+  // same as above (single), but filter is different
+  filter := sj.Filter{Field: "id", Value: "per0000001", Compare: sj.Eq}
+
+	move := sj.TrajectConfig{TypeName: typeName, Validator: alwaysOkay, Filter: &filter}
+
+```
 
 # Controlling each stage of import
 
@@ -246,11 +285,12 @@ import (
 
 	typeName := "person"
   // see above - grab single record however necessary
-  // and stash in staging table
-	err := sj.StashStaging(people...)
+  // and stash in staging table, could just be one
+	err := sj.StashStaging(person)
   // just need basic 'id' to grab to validate
-  identifier := sj.Identifier{Id: id, Type: typeName}
-	stub := sj.Stub{Id: identifier}
+  //identifier := sj.Identifier{Id: id, Type: typeName}
+	//stub := sj.Stub{Id: identifier}
+  stub := sj.MakeStub(id, typeName)
   // validate however you want
 	alwaysOkay := func(json string) bool { return true }
 	err = sj.ProcessSingleStaging(stub, alwaysOkay)

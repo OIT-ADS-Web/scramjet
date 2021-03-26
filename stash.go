@@ -1,8 +1,9 @@
 package scramjet
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/pkg/errors"
 )
 
 // the parameter (int) if offset
@@ -285,4 +286,55 @@ func MakePacket(id string, typeName string, obj interface{}) Packet {
 		Id:  Identifier{Id: id, Type: typeName},
 		Obj: obj,
 	}
+}
+
+/*
+func RemoveSpecific(id string, typeName string) error {
+	stub := MakeStub(id, typeName)
+	return RemoveStub(stub)
+}
+*/
+
+func MakeStub(id string, typeName string) Stub {
+	return Stub{
+		Id: Identifier{Id: id, Type: typeName},
+	}
+}
+
+func RemoveRecords(stubs []Stub) error {
+	// turn it into 'identifiable' list
+	var ids []Identifiable
+	for _, s := range stubs {
+		ids = append(ids, s)
+	}
+	// 1. add as 'deletes' to staging
+	err := BulkAddStagingForDelete(ids...)
+	if err != nil {
+		return errors.Wrap(err, "could not mark records for delete")
+	}
+	// 2. remove from resources
+	err = BatchDeleteStagingFromResources(ids...)
+	if err != nil {
+		return errors.Wrap(err, "could not delete records")
+	}
+	// 3. remove from staging (so not hanging around)
+	err = ClearMultipleDeletedFromStaging(ids...)
+	if err != nil {
+		return errors.Wrap(err, "could not delete records from staging table")
+	}
+
+	return nil
+}
+
+func RemoveRecord(stub Stub) error {
+	err := BulkAddStagingForDelete(stub)
+	if err != nil {
+		return errors.Wrap(err, "could not mark records for delete")
+	}
+	// 2. removes from resources, then from staging
+	err = RemoveStagingDeletedFromResources(stub.Identifier().Id, stub.Identifier().Type)
+	if err != nil {
+		return errors.Wrap(err, "could not delete records")
+	}
+	return nil
 }

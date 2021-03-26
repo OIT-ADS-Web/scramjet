@@ -238,3 +238,44 @@ func TestDefaultedIntake(t *testing.T) {
 		t.Errorf("after import should be 2 records - not :%d\n", count)
 	}
 }
+
+func TestRemoveByStub(t *testing.T) {
+	sj.ClearAllStaging()
+	sj.ClearAllResources()
+	typeName := "person"
+
+	// typically this is how a list might be created
+	dbList := func() []IntakePerson {
+		person1 := IntakePerson{Id: "per0000001", Name: "Test1"}
+		person2 := IntakePerson{Id: "per0000002", Name: "Test2"}
+		return []IntakePerson{person1, person2}
+	}
+
+	listMaker := func(i int) ([]sj.Storeable, error) {
+		var people []sj.Storeable
+		for _, person := range dbList() {
+			pass := sj.MakePacket(person.Id, typeName, person)
+			people = append(people, pass)
+		}
+		return people, nil
+	}
+
+	// try simple, non-filter version (all of a type)
+	alwaysOkay := func(json string) bool { return true }
+
+	intake := sj.IntakeConfig{TypeName: typeName, ListMaker: listMaker}
+	move := sj.TrajectConfig{TypeName: typeName, Validator: alwaysOkay}
+
+	err := sj.ScramjetIntake(intake, move)
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+	// should have two records now ...
+	// try removing one
+	stub := sj.MakeStub("per0000001", "person")
+	err = sj.RemoveRecord(stub)
+	count := sj.ResourceCount(typeName)
+	if count != 1 {
+		t.Errorf("after remove should be 1 record - not :%d\n", count)
+	}
+}
