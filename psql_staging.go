@@ -744,7 +744,7 @@ func ClearMultipleDeletedFromStaging(items ...Identifiable) error {
 	}
 	inClause := strings.Join(ids, ", ")
 
-	sql := fmt.Sprintf(`DELETE from staging WHERE id, type IN (
+	sql := fmt.Sprintf(`DELETE from staging WHERE (id, type) IN (
 		%s
 	) AND to_delete = true`, inClause)
 

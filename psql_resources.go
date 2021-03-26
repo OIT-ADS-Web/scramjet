@@ -549,7 +549,7 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifi
 	}
 	inClause := strings.Join(ids, ", ")
 
-	sql := fmt.Sprintf(`DELETE from resources WHERE id, type IN (
+	sql := fmt.Sprintf(`DELETE from resources WHERE (id, type) IN (
 		%s
 	)`, inClause)
 
