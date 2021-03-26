@@ -9,35 +9,12 @@ import (
 // the parameter (int) if offset
 type IntakeListMaker func(int) ([]Storeable, error)
 
-//type ProgressChecker func(int)
-//type DeleteChecker func([]string)
-
 type IntakeConfig struct {
 	TypeName  string
 	ListMaker IntakeListMaker
 	Count     int
 	ChunkSize int
 }
-
-/*
-func BasicIntakeConfig(typeName string, listMaker IntakeListMaker) IntakeConfig {
-	return IntakeConfig{
-		TypeName:  typeName,
-		ListMaker: listMaker,
-		Count:     0,
-		ChunkSize: 1000,
-	}
-}
-
-func ChunkedIntakeConfig(typeName string, listMaker IntakeListMaker, count int, chunkSize int) IntakeConfig {
-	return IntakeConfig{
-		TypeName:  typeName,
-		ListMaker: listMaker,
-		Count:     count,
-		ChunkSize: chunkSize,
-	}
-}
-*/
 
 type TrajectConfig struct {
 	TypeName  string
