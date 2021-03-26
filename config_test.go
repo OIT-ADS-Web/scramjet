@@ -14,7 +14,4 @@ func TestCreateTables(t *testing.T) {
 	if !sj.ResourceTableExists() {
 		t.Error("did not create resource table")
 	}
-	if !sj.TransactionTableExists() {
-		t.Error("did not create transaction table")
-	}
 }

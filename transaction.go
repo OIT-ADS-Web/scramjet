@@ -1,5 +1,6 @@
 package scramjet
 
+/*
 import (
 	"context"
 	"database/sql"
@@ -78,9 +79,9 @@ func NewTransaction() int {
 		log.Fatalf("error getting transactionId %v", err)
 	}
 
-	sql := `INSERT INTO 
-	staging_transactions 
-	DEFAULT VALUES 
+	sql := `INSERT INTO
+	staging_transactions
+	DEFAULT VALUES
 	RETURNING transaction_id`
 
 	row := tx.QueryRow(ctx, sql)
@@ -105,7 +106,7 @@ func FinishTransaction(transactionId int) error {
 		return err
 	}
 
-	sql := `UPDATE staging_transactions 
+	sql := `UPDATE staging_transactions
 	set completed_at = NOW()
 	WHERE transaction_id = $1`
 
@@ -209,3 +210,4 @@ func RetrieveAllTransactions() ([]Transaction, error) {
 	}
 	return ScanTransactions(rows)
 }
+*/

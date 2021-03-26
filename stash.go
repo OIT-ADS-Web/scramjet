@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// the parameter (int) if offset
+// the parameter (int) is 'offset'
 type IntakeListMaker func(int) ([]Storeable, error)
 
 type IntakeConfig struct {

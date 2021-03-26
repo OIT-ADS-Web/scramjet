@@ -58,9 +58,9 @@ func Configure(conf Config) {
 	if !ResourceTableExists() {
 		MakeResourceSchema()
 	}
-	if !TransactionTableExists() {
-		MakeTransactionSchema()
-	}
+	//if !TransactionTableExists() {
+	//	MakeTransactionSchema()
+	//}
 }
 
 func Shutdown() {

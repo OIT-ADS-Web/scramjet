@@ -1,5 +1,6 @@
 package scramjet_test
 
+/*
 import (
 	"fmt"
 	"testing"
@@ -66,3 +67,4 @@ func TestCompleteTransaction(t *testing.T) {
 
 	fmt.Printf("transaction=#%v", found)
 }
+*/
