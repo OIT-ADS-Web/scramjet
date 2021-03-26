@@ -1,5 +1,13 @@
 package main
 
+/*
+
+*****************
+
+NOTE: this is a sketch of possible work to later do not a working thing
+
+*****************
+*/
 import (
 	"context"
 	"encoding/json"
@@ -12,9 +20,9 @@ import (
 	"os/signal"
 	"time"
 
+	sj "github.com/OIT-ADS-Web/scramjet"
 	"github.com/gorilla/mux"
 	"github.com/namsral/flag"
-	sj "github.com/OIT-ADS-Web/scramjet"
 )
 
 func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {

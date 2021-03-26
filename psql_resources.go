@@ -115,7 +115,7 @@ func RetrieveTypeResourcesByQuery(typeName string, filter Filter) ([]Resource, e
 	db := GetPool()
 	ctx := context.Background()
 
-	logger.Debug(fmt.Sprintf("res-sql=%s\n", sql))
+	GetLogger().Debug(fmt.Sprintf("res-sql=%s\n", sql))
 	rows, _ := db.Query(ctx, sql, typeName)
 	return ScanResources(rows)
 }

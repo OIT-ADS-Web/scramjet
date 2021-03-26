@@ -68,7 +68,9 @@ Once a record has made it to resources, it is removed from staging
 
 # Simplest example
 
-This would be typical usage - bulk importing a type of record
+This would be typical usage - bulk importing a type of record. For
+example - a nightly csv feed, or nightly table dump - that is a full
+set of records each time
 
 ```go
 
@@ -122,6 +124,27 @@ import (
   ...
 
 ```
+
+# Other common use cases
+
+## A service to gives updates only
+
+```golang
+  ... // per example above
+	intake := sj.IntakeConfig{TypeName: typeName, Count: 2, ChunkSize: 1, ListMaker: listMaker}
+	move := sj.TrajectConfig{TypeName: typeName, Validator: alwaysOkay}
+
+  // except no 'outtake' (defered until later - since those are not part of this import)
+	err := sj.ScramjetIntake(intake, move)
+  
+  ...
+
+```
+
+## One record at a time (on save/delete)
+
+## A group of records per person
+
 
 # Controlling each stage of import
 

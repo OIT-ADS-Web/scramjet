@@ -5,8 +5,8 @@ import (
 )
 
 // simplest possible logger
-var logger Logger
-var level LogLevel
+var _logger Logger
+var _level LogLevel
 
 type LogLevel int
 
@@ -16,11 +16,19 @@ const (
 )
 
 func SetLogger(log Logger) {
-	logger = log
+	_logger = log
+}
+
+func GetLogger() Logger {
+	return _logger
 }
 
 func SetLogLevel(lvl LogLevel) {
-	level = lvl
+	_level = lvl
+}
+
+func GetLogLevel() LogLevel {
+	return _level
 }
 
 type Logger interface {
@@ -31,13 +39,13 @@ type Logger interface {
 type simpleLogger struct{}
 
 func (*simpleLogger) Info(msg string) {
-	if level >= INFO {
+	if GetLogLevel() >= INFO {
 		fmt.Println(msg)
 	}
 }
 
 func (*simpleLogger) Debug(msg string) {
-	if level >= DEBUG {
+	if GetLogLevel() >= DEBUG {
 		fmt.Println(msg)
 	}
 }

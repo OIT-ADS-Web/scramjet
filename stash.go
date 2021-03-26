@@ -44,6 +44,26 @@ func Scramjet(in IntakeConfig, process TrajectConfig, out OutakeConfig) error {
 	return nil
 }
 
+func ScramjetIntake(in IntakeConfig, process TrajectConfig) error {
+	err := Inject(in)
+	if err != nil {
+		return err
+	}
+	err = Traject(process)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ScramjetOutake(out OutakeConfig) error {
+	err := Eject(out)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func Inject(config IntakeConfig) error {
 	return IntakeInChunks(config)
 }
@@ -108,6 +128,7 @@ func TransferSubset(typeName string, filter Filter, validator ValidatorFunc) err
 
 func IntakeInChunks(ins IntakeConfig) error {
 	var err error
+	var logger = GetLogger()
 	for i := 0; i < ins.Count; i += ins.ChunkSize {
 		msg := fmt.Sprintf("> retrieving %d-%d of %d\n", i, i+ins.ChunkSize, ins.Count)
 		logger.Debug(msg)
@@ -201,7 +222,7 @@ func FlagDeletes(sourceDataIds []string, existingData []Resource, config DiffPro
 	}
 	extras := Difference(destData, sourceDataIds)
 
-	logger.Debug(fmt.Sprintf("found =%d extras\n", len(extras)))
+	GetLogger().Debug(fmt.Sprintf("found =%d extras\n", len(extras)))
 
 	deletes := make([]Identifiable, 0)
 	for _, id := range extras {

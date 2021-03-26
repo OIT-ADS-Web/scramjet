@@ -35,13 +35,13 @@ func Configure(conf Config) {
 	if conf.Logger != nil {
 		SetLogger(*conf.Logger)
 	} else {
-		logger = Logger(&simpleLogger{})
+		logger := Logger(&simpleLogger{})
 		SetLogger(logger)
 	}
 
 	SetLogLevel(conf.LogLevel)
 
-	logger = Logger(&simpleLogger{})
+	logger := Logger(&simpleLogger{})
 	SetLogger(logger)
 	SetLogLevel(INFO)
 
@@ -61,7 +61,10 @@ func Configure(conf Config) {
 	if !TransactionTableExists() {
 		MakeTransactionSchema()
 	}
+}
 
+func Shutdown() {
 	// caller, in theory, still needs to do this -->
 	//defer sj.DBPool.Close()
+	DBPool.Close()
 }
