@@ -90,7 +90,7 @@ import (
 	}
 
   // 2. then turn into a list of 'Storeable' objects
-	listMaker := func(i int) ([]sj.Storeable, error) {
+  listMaker := func(i int) ([]sj.Storeable, error) {
 		var people []sj.Storeable
 		for _, person := range dbList() {
 			pass := sj.MakePacket(person.Id, typeName, person)
@@ -99,8 +99,8 @@ import (
 		return people, nil
 	}
 
-	// 3. create a validator function that validates json representation
-	alwaysOkay := func(json string) bool { return true }
+  // 3. create a validator function that validates json representation
+  alwaysOkay := func(json string) bool { return true }
 
   // 4. then construct configs for intake, trajectory (moving from staging to resources)
   //    and finding deletes (records in resources no longer valid)
@@ -157,7 +157,7 @@ import (
 
   // for instance if database save/update person, id = per0000001
   filter := sj.Filter{Field: "id", Value: "per0000001", Compare: sj.Eq}
-	move := sj.TrajectConfig{TypeName: typeName, Validator: alwaysOkay, Filter: &filter}
+  move := sj.TrajectConfig{TypeName: typeName, Validator: alwaysOkay, Filter: &filter}
 
   // this will only process based on the filter
 	err := sj.ScramjetIntake(intake, move)
@@ -165,7 +165,7 @@ import (
 
   // to delete, for instance database delete person, id = per0000001
   stub := MakeStub("per0000001", "person")
-  err = sj.RemoveRecord(stub)
+  err = sj.RemoveRecords(stub)
 
   ...
 
@@ -174,7 +174,7 @@ import (
   deletes = append(deletes, MakeStub("per0000001", "person"))
   deletes = append(deletes, MakeStub("per0000002", "person"))
 
-  err = sj.RemoveRecords(deletes)
+  err = sj.RemoveRecords(deletes...)
 
 ```
 
@@ -209,9 +209,9 @@ import (
 	person1 := TestPerson{Id: "per0000001", Name: "Test1"}
 	person2 := TestPerson{Id: "per0000002", Name: "Test2"}
 	// must use anything of interface 'Storeable'
-  // there is a MakePacket wrapper
 	pass1 := sj.Packet{Id: sj.Identifier{Id: person1.Id, Type: typeName}, Obj: person1}
-	pass2 := sj.Packet{Id: sj.Identifier{Id: person2.Id, Type: typeName}, Obj: person2}
+  // there is a also a MakePacket wrapper
+	pass2 := sj.MakePacket(person2.Id, typeName, person2)
 
 	people := []sj.Storeable{pass1, pass2}
 	err := sj.BulkAddStaging(people...)
