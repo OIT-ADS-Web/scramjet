@@ -25,41 +25,6 @@ func setup() {
 	sj.Configure(config)
 	sj.ClearAllStaging()
 	sj.ClearAllResources()
-	/*
-		err := sj.DropStaging()
-		if err != nil {
-			log.Fatalf("cannot delete staging database %s\n", err)
-		}
-		err = sj.DropResources()
-		if err != nil {
-			log.Fatal("cannot delete resources database")
-		}
-
-
-			err := sj.MakeConnectionPool(config)
-
-			if err != nil {
-				log.Fatal("cannot connect to database")
-			}
-
-			err = sj.DropStaging()
-			if err != nil {
-				log.Fatalf("cannot delete staging database %s\n", err)
-			}
-
-			if !sj.StagingTableExists() {
-				fmt.Println("staging table not found")
-				sj.MakeStagingSchema()
-			}
-			err = sj.DropResources()
-			if err != nil {
-				log.Fatal("cannot delete resources database")
-			}
-			if !sj.ResourceTableExists() {
-				fmt.Println("resources table not found")
-				sj.MakeResourceSchema()
-			}
-	*/
 }
 
 func shutdown() {
