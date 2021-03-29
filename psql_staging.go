@@ -732,6 +732,37 @@ func ClearStagingTypeDeletes(typeName string) error {
 	return nil
 }
 
+func ClearMultipleDeletedFromStaging(items ...Identifiable) error {
+	db := GetPool()
+	ctx := context.Background()
+
+	var ids = make([]string, 0)
+	for _, item := range items {
+		s := fmt.Sprintf("('%s', '%s')", item.Identifier().Id, item.Identifier().Type)
+		ids = append(ids, s)
+	}
+	inClause := strings.Join(ids, ", ")
+
+	sql := fmt.Sprintf(`DELETE from staging WHERE (id, type) IN (
+		%s
+	) AND to_delete = true`, inClause)
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, sql)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func ClearDeletedFromStaging(id string, typeName string) error {
 	db := GetPool()
 	ctx := context.Background()

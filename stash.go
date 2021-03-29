@@ -1,47 +1,165 @@
 package scramjet
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/pkg/errors"
 )
 
+// the parameter (int) is 'offset'
 type IntakeListMaker func(int) ([]Storeable, error)
 
-type ProgressChecker func(int)
-
-type DeleteChecker func([]string)
-
-type JustTestingInspector func(...interface{})
-type ChunkableIntakeConfig struct {
-	Count     int
-	ChunkSize int
-	JustTest  bool
+type IntakeConfig struct {
 	TypeName  string
 	ListMaker IntakeListMaker
-	Progress  ProgressChecker
-	Inspector JustTestingInspector
+	Count     int
+	ChunkSize int
 }
 
-func IntakeInChunks(ins ChunkableIntakeConfig) error {
+type TrajectConfig struct {
+	TypeName  string
+	Validator ValidatorFunc
+	Filter    *Filter
+}
+
+type OutakeConfig struct {
+	TypeName  string
+	ListMaker OutakeListMaker
+	Filter    *Filter
+}
+
+func Scramjet(in IntakeConfig, process TrajectConfig, out OutakeConfig) error {
+	err := Inject(in)
+	if err != nil {
+		return err
+	}
+	err = Traject(process)
+	if err != nil {
+		return err
+	}
+	err = Eject(out)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ScramjetIntake(in IntakeConfig, process TrajectConfig) error {
+	err := Inject(in)
+	if err != nil {
+		return err
+	}
+	err = Traject(process)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ScramjetOutake(out OutakeConfig) error {
+	err := Eject(out)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func Inject(config IntakeConfig) error {
+	return IntakeInChunks(config)
+}
+
+func Traject(config TrajectConfig) error {
+	if config.Filter != nil {
+		return TransferSubset(config.TypeName, *config.Filter, config.Validator)
+	} else {
+		return TransferAll(config.TypeName, config.Validator)
+	}
+}
+
+func Eject(config OutakeConfig) error {
+	err := ProcessOutake(config)
+	if err != nil {
+		return err
+	}
+	// how to differentiate diff, with out-take?
+	if config.Filter != nil {
+		// NOTE: right now json is {} so no way to actually filter
+		err = BulkRemoveStagingDeletedFromResources(config.TypeName)
+	} else {
+		err = BulkRemoveStagingDeletedFromResources(config.TypeName)
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func TransferAll(typeName string, validator ValidatorFunc) error {
+	err := ProcessTypeStaging(typeName, validator)
+	if err != nil {
+		return err
+	}
+	staging, err := RetrieveValidStaging(typeName)
+	if err != nil {
+		return err
+	}
+	err = BulkMoveStagingTypeToResources(typeName, staging...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func TransferSubset(typeName string, filter Filter, validator ValidatorFunc) error {
+	err := ProcessTypeStagingFiltered(typeName, filter, validator)
+	if err != nil {
+		return err
+	}
+	staging, err := RetrieveValidStagingFiltered(typeName, filter)
+	if err != nil {
+		return err
+	}
+	err = BulkMoveStagingToResourcesByFilter(typeName, filter, staging...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func IntakeInChunks(ins IntakeConfig) error {
 	var err error
-	for i := 0; i < ins.Count; i += ins.ChunkSize {
-		if ins.Progress != nil {
-			ins.Progress(i)
-		}
-		list, err := ins.ListMaker(i)
+	var logger = GetLogger()
+
+	if ins.Count == 0 {
+		msg := fmt.Sprintf("> retrieving records of %s in one call\n", ins.TypeName)
+		logger.Debug(msg)
+		offset := 0
+		// just start at first record
+		list, err := ins.ListMaker(offset)
 		if err != nil {
 			return err
 		}
-		if !ins.JustTest {
+		err = BulkAddStaging(list...)
+		if err != nil {
+			return err
+		}
+		msg = fmt.Sprintf("> retrieved %d records\n", len(list))
+		logger.Debug(msg)
+
+	} else {
+		for i := 0; i < ins.Count; i += ins.ChunkSize {
+			msg := fmt.Sprintf("> retrieving %d-%d of %d\n", i, i+ins.ChunkSize, ins.Count)
+			logger.Debug(msg)
+			list, err := ins.ListMaker(i)
+			if err != nil {
+				return err
+			}
 			err = BulkAddStaging(list...)
 			if err != nil {
 				return err
 			}
-		} else {
-			if ins.Inspector != nil {
-				ins.Inspector(list)
-			}
 		}
+		logger.Debug(fmt.Sprintf("> finished %s records\n", ins.TypeName))
 	}
 	return err
 }
@@ -51,26 +169,22 @@ type OutakeListMaker func() ([]string, error)
 
 type ResourceListMaker func() ([]Resource, error)
 
-// NOTE: this is mostly the same as DiffProcessConfig
-type OutakeProcessConfig struct {
-	TypeName  string
-	ListMaker OutakeListMaker
-	JustTest  bool
-	Checker   DeleteChecker
-	Inspector JustTestingInspector
-}
-
-func ProcessOutake(config OutakeProcessConfig) error {
+func ProcessOutake(config OutakeConfig) error {
 	// NOTE: for comparing source data of *all* with existing *all*
-	existing := func() ([]Resource, error) {
-		return RetrieveTypeResources(config.TypeName)
+	var existing ExistingListMaker
+	if config.Filter != nil {
+		existing = func() ([]Resource, error) {
+			return RetrieveTypeResourcesByQuery(config.TypeName, *config.Filter)
+		}
+	} else {
+		existing = func() ([]Resource, error) {
+			return RetrieveTypeResources(config.TypeName)
+		}
 	}
 	diffConfig := DiffProcessConfig{
 		TypeName:          config.TypeName,
 		ListMaker:         config.ListMaker,
 		ExistingListMaker: existing,
-		Inspector:         config.Inspector,
-		Checker:           config.Checker,
 	}
 	return ProcessDiff(diffConfig)
 }
@@ -82,9 +196,6 @@ type DiffProcessConfig struct {
 	TypeName          string
 	ExistingListMaker ExistingListMaker
 	ListMaker         OutakeListMaker
-	JustTest          bool
-	Checker           DeleteChecker
-	Inspector         JustTestingInspector
 }
 
 func ProcessDiff(config DiffProcessConfig) error {
@@ -105,9 +216,6 @@ func ProcessDiff(config DiffProcessConfig) error {
 
 func FlagDeletes(sourceDataIds []string, existingData []Resource, config DiffProcessConfig) error {
 	typeName := config.TypeName
-	justTest := config.JustTest
-	inspector := config.Inspector
-	checker := config.Checker
 
 	destData := make([]string, 0)
 
@@ -134,28 +242,56 @@ func FlagDeletes(sourceDataIds []string, existingData []Resource, config DiffPro
 	}
 	extras := Difference(destData, sourceDataIds)
 
-	if checker != nil {
-		checker(extras)
-	}
+	GetLogger().Debug(fmt.Sprintf("found =%d extras\n", len(extras)))
 
 	deletes := make([]Identifiable, 0)
 	for _, id := range extras {
 		// how to get type?
 		deletes = append(deletes, Stub{Id: Identifier{Id: id, Type: typeName}})
 	}
-
-	if !justTest {
-		// NOTE: this is just marking them, not deleting at this stage
-		err := BulkAddStagingForDelete(deletes...)
-		if err != nil {
-			msg := fmt.Sprintf("could not mark for delete: %s", err)
-			return errors.New(msg)
-		}
-	} else {
-		if inspector != nil {
-			inspector(deletes)
-		}
+	err := BulkAddStagingForDelete(deletes...)
+	if err != nil {
+		msg := fmt.Sprintf("could not mark for delete: %s", err)
+		return errors.New(msg)
 	}
-	// return counts? or entire list?
+	// return something else? counts? entire list?
+	return nil
+}
+
+func MakePacket(id string, typeName string, obj interface{}) Packet {
+	return Packet{
+		Id:  Identifier{Id: id, Type: typeName},
+		Obj: obj,
+	}
+}
+
+func MakeStub(id string, typeName string) Stub {
+	return Stub{
+		Id: Identifier{Id: id, Type: typeName},
+	}
+}
+
+func RemoveRecords(stubs ...Stub) error {
+	// turn it into 'identifiable' list
+	var ids []Identifiable
+	for _, s := range stubs {
+		ids = append(ids, s)
+	}
+	// 1. add as 'deletes' to staging
+	err := BulkAddStagingForDelete(ids...)
+	if err != nil {
+		return errors.Wrap(err, "could not mark records for delete")
+	}
+	// 2. remove from resources
+	err = BatchDeleteStagingFromResources(ids...)
+	if err != nil {
+		return errors.Wrap(err, "could not delete records")
+	}
+	// 3. remove from staging (so not hanging around)
+	err = ClearMultipleDeletedFromStaging(ids...)
+	if err != nil {
+		return errors.Wrap(err, "could not delete records from staging table")
+	}
+
 	return nil
 }

@@ -115,8 +115,7 @@ func RetrieveTypeResourcesByQuery(typeName string, filter Filter) ([]Resource, e
 	db := GetPool()
 	ctx := context.Background()
 
-	// TODO: would like a way to log.debug the sql->
-	//fmt.Printf("res-sql=%s\n", sql)
+	GetLogger().Debug(fmt.Sprintf("res-sql=%s\n", sql))
 	rows, _ := db.Query(ctx, sql, typeName)
 	return ScanResources(rows)
 }
@@ -550,7 +549,7 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifi
 	}
 	inClause := strings.Join(ids, ", ")
 
-	sql := fmt.Sprintf(`DELETE from resources WHERE id, type IN (
+	sql := fmt.Sprintf(`DELETE from resources WHERE (id, type) IN (
 		%s
 	)`, inClause)
 
