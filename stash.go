@@ -234,7 +234,9 @@ func FlagDeletes(sourceDataIds []string, existingData []Resource, config DiffPro
 		return errors.New(msg)
 	} else if len(sourceDataIds) == 0 && len(existingData) == 0 {
 		msg := "0 record to compare on either side!"
-		return errors.New(msg)
+		GetLogger().Info(msg)
+		// is this an error - or just mean nothing to do?
+		return nil
 	}
 
 	if len(existingData) > 0 {
