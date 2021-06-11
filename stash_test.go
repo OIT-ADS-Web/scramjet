@@ -11,6 +11,12 @@ type IntakePerson struct {
 	Name string `json:"name"`
 }
 
+type IntakeNewsfeed struct {
+	Id       string `json:"id"`
+	PersonId string `json:"personId"`
+	Title    string `json:"title"`
+}
+
 func TestFullIntake(t *testing.T) {
 	sj.ClearAllStaging()
 	sj.ClearAllResources()
@@ -323,5 +329,91 @@ func TestRemoveMultiple(t *testing.T) {
 	count := sj.ResourceCount(typeName)
 	if count != 1 {
 		t.Errorf("after remove should be 1 record - not :%d\n", count)
+	}
+}
+
+func TestRemoveAll(t *testing.T) {
+	sj.ClearAllStaging()
+	sj.ClearAllResources()
+	typeName := "person"
+
+	// typically this is how a list might be created
+	dbList := func() []IntakePerson {
+		person1 := IntakePerson{Id: "per0000001", Name: "Test1"}
+		return []IntakePerson{person1}
+	}
+
+	listMaker := func(i int) ([]sj.Storeable, error) {
+		var people []sj.Storeable
+		for _, person := range dbList() {
+			pass := sj.MakePacket(person.Id, typeName, person)
+			people = append(people, pass)
+		}
+		return people, nil
+	}
+
+	// everything valid in test
+	alwaysOkay := func(json string) bool { return true }
+
+	intake := sj.IntakeConfig{TypeName: typeName, ListMaker: listMaker}
+	move := sj.TrajectConfig{TypeName: typeName, Validator: alwaysOkay}
+
+	err := sj.ScramjetIntake(intake, move)
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+
+	// import another type - with a filterable attribute
+	typeName2 := "newsfeed"
+	dbList2 := func() []IntakeNewsfeed {
+		new1 := IntakeNewsfeed{Id: "new1", PersonId: "per0000001", Title: "Testing1"}
+		new2 := IntakeNewsfeed{Id: "new2", PersonId: "per0000001", Title: "Testing2"}
+		new3 := IntakeNewsfeed{Id: "new3", PersonId: "per0000001", Title: "Testing3"}
+		return []IntakeNewsfeed{new1, new2, new3}
+	}
+
+	listMaker2 := func(i int) ([]sj.Storeable, error) {
+		var feeds []sj.Storeable
+		for _, feed := range dbList2() {
+			pass := sj.MakePacket(feed.Id, typeName2, feed)
+			feeds = append(feeds, pass)
+		}
+		return feeds, nil
+	}
+
+	intake2 := sj.IntakeConfig{TypeName: typeName2, ListMaker: listMaker2}
+	move2 := sj.TrajectConfig{TypeName: typeName2, Validator: alwaysOkay}
+
+	// import news records in
+	err = sj.ScramjetIntake(intake2, move2)
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+
+	// make sure they made it
+	count := sj.ResourceCount(typeName2)
+	if count != 3 {
+		t.Errorf("should be 3 records - not :%d\n", count)
+	}
+
+	filter := sj.Filter{Field: "personId", Value: "per0000001", Compare: sj.Eq}
+	ids := func() ([]string, error) {
+		//NOTE: the idea is that the source has no more records
+		return []string{}, nil
+	}
+	// having the 'filter' allows deleting all
+	out := sj.OutakeConfig{TypeName: typeName2,
+		ListMaker: ids,
+		Filter:    &filter,
+	}
+	err = sj.Eject(out)
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+
+	// should be 0 records now
+	count2 := sj.ResourceCount(typeName2)
+	if count2 > 0 {
+		t.Errorf("should be 0 records - not :%d\n", count2)
 	}
 }
