@@ -172,20 +172,29 @@ type ResourceListMaker func() ([]Resource, error)
 func ProcessOutake(config OutakeConfig) error {
 	// NOTE: for comparing source data of *all* with existing *all*
 	var existing ExistingListMaker
+	var diffConfig DiffProcessConfig
 	if config.Filter != nil {
 		existing = func() ([]Resource, error) {
 			return RetrieveTypeResourcesByQuery(config.TypeName, *config.Filter)
+		}
+		diffConfig = DiffProcessConfig{
+			TypeName:          config.TypeName,
+			ListMaker:         config.ListMaker,
+			ExistingListMaker: existing,
+			AllowDeleteAll:    true,
 		}
 	} else {
 		existing = func() ([]Resource, error) {
 			return RetrieveTypeResources(config.TypeName)
 		}
+		diffConfig = DiffProcessConfig{
+			TypeName:          config.TypeName,
+			ListMaker:         config.ListMaker,
+			ExistingListMaker: existing,
+			AllowDeleteAll:    false,
+		}
 	}
-	diffConfig := DiffProcessConfig{
-		TypeName:          config.TypeName,
-		ListMaker:         config.ListMaker,
-		ExistingListMaker: existing,
-	}
+
 	return ProcessDiff(diffConfig)
 }
 
@@ -196,6 +205,7 @@ type DiffProcessConfig struct {
 	TypeName          string
 	ExistingListMaker ExistingListMaker
 	ListMaker         OutakeListMaker
+	AllowDeleteAll    bool
 }
 
 func ProcessDiff(config DiffProcessConfig) error {
@@ -219,7 +229,7 @@ func FlagDeletes(sourceDataIds []string, existingData []Resource, config DiffPro
 
 	destData := make([]string, 0)
 
-	if len(sourceDataIds) == 0 && len(existingData) > 0 {
+	if len(sourceDataIds) == 0 && len(existingData) > 0 && !config.AllowDeleteAll {
 		msg := fmt.Sprintf("0 source records found - this would delete all %s records!\n", typeName)
 		return errors.New(msg)
 	} else if len(sourceDataIds) == 0 && len(existingData) == 0 {
