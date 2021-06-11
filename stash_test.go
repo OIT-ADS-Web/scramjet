@@ -14,7 +14,7 @@ type IntakePerson struct {
 type IntakeNewsfeed struct {
 	Id       string `json:"id"`
 	PersonId string `json:"personId"`
-	Title    string `json:"name"`
+	Title    string `json:"title"`
 }
 
 func TestFullIntake(t *testing.T) {
