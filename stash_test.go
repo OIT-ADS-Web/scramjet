@@ -352,7 +352,7 @@ func TestRemoveAll(t *testing.T) {
 		return people, nil
 	}
 
-	// try simple, non-filter version (all of a type)
+	// everything valid in test
 	alwaysOkay := func(json string) bool { return true }
 
 	intake := sj.IntakeConfig{TypeName: typeName, ListMaker: listMaker}
@@ -363,6 +363,7 @@ func TestRemoveAll(t *testing.T) {
 		t.Errorf("err=%v\n", err)
 	}
 
+	// import another type - with a filterable attribute
 	typeName2 := "newsfeed"
 	dbList2 := func() []IntakeNewsfeed {
 		new1 := IntakeNewsfeed{Id: "new1", PersonId: "per0000001", Title: "Testing1"}
@@ -383,11 +384,13 @@ func TestRemoveAll(t *testing.T) {
 	intake2 := sj.IntakeConfig{TypeName: typeName2, ListMaker: listMaker2}
 	move2 := sj.TrajectConfig{TypeName: typeName2, Validator: alwaysOkay}
 
+	// import news records in
 	err = sj.ScramjetIntake(intake2, move2)
 	if err != nil {
 		t.Errorf("err=%v\n", err)
 	}
 
+	// make sure they made it
 	count := sj.ResourceCount(typeName2)
 	if count != 3 {
 		t.Errorf("should be 3 records - not :%d\n", count)
@@ -407,6 +410,8 @@ func TestRemoveAll(t *testing.T) {
 	if err != nil {
 		t.Errorf("err=%v\n", err)
 	}
+
+	// should be 0 records now
 	count2 := sj.ResourceCount(typeName2)
 	if count2 > 0 {
 		t.Errorf("should be 0 records - not :%d\n", count2)
