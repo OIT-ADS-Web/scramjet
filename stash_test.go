@@ -17,6 +17,11 @@ type IntakeNewsfeed struct {
 	Title    string `json:"title"`
 }
 
+type IntakeKeyword struct {
+	Id   string `json:"id"`
+	Label string `json:"label"`
+}
+
 func TestFullIntake(t *testing.T) {
 	sj.ClearAllStaging()
 	sj.ClearAllResources()
@@ -415,5 +420,46 @@ func TestRemoveAll(t *testing.T) {
 	count2 := sj.ResourceCount(typeName2)
 	if count2 > 0 {
 		t.Errorf("should be 0 records - not :%d\n", count2)
+	}
+}
+
+func TestApostropheIdIntake(t *testing.T) {
+	sj.ClearAllStaging()
+	sj.ClearAllResources()
+	typeName := "keyword"
+
+	// typically this is how a list might be created
+	dbList := func() []IntakeKeyword {
+		keyword1 := IntakeKeyword{
+			Id: "https://en.wikipedia.org/wiki/Women's_writing_(literary_category)/syn1",
+			Label: "Women's Literature",
+		}
+		return []IntakeKeyword{keyword1}
+	}
+
+	listMaker := func(i int) ([]sj.Storeable, error) {
+		var people []sj.Storeable
+		for _, person := range dbList() {
+			pass := sj.MakePacket(person.Id, typeName, person)
+			people = append(people, pass)
+		}
+		return people, nil
+	}
+
+	// try simple, non-filter version (all of a type)
+	alwaysOkay := func(json string) bool { return true }
+	// NOTE: count is entire list - in case list has to be chunked
+	intake := sj.IntakeConfig{TypeName: typeName, ListMaker: listMaker}
+	move := sj.TrajectConfig{TypeName: typeName, Validator: alwaysOkay}
+
+	err := sj.ScramjetIntake(intake, move)
+
+	if err != nil {
+		t.Errorf("err=%v\n", err)
+	}
+
+	count := sj.ResourceCount(typeName)
+	if count != 1 {
+		t.Errorf("after import should be 1 record(s) - not :%d\n", count)
 	}
 }

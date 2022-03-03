@@ -496,19 +496,19 @@ func BatchDeleteStagingFromResources(resources ...Identifiable) error {
 
 // how to enusure staging-resource IS identifiable
 func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) error {
-	var clauses = make([]string, 0)
-	for _, resource := range resources {
-		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
-		clauses = append(clauses, s)
+	// stole idea from here:
+	// https://stackoverflow.com/questions/71238345/how-to-do-where-in-any-on-multiple-columns-in-golang-with-pq-library
+	inSQL, args := "", []interface{}{}
+	for i, resource := range resources {
+		n := i * 2
+		inSQL += fmt.Sprintf("($%d,$%d),", n+1, n+2)
+		args = append(args, resource.Identifier().Id, resource.Identifier().Type)
 	}
+	inSQL = inSQL[:len(inSQL)-1] // drop last ","
+	
+	sql := `DELETE from resources WHERE (id, type) IN (` + inSQL + `)`
 
-	inClause := strings.Join(clauses, ", ")
-
-	sql := fmt.Sprintf(`DELETE from resources WHERE (id, type) IN (
-		%s
-	)`, inClause)
-
-	_, err := tx.Exec(ctx, sql)
+	_, err := tx.Exec(ctx, sql, args...)
 
 	if err != nil {
 		return err
@@ -542,18 +542,19 @@ func BatchDeleteResourcesFromResources(resources ...Identifiable) error {
 }
 
 func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifiable, tx pgx.Tx) error {
-	var ids = make([]string, 0)
-	for _, resource := range resources {
-		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
-		ids = append(ids, s)
+	// stole idea from here:
+	// https://stackoverflow.com/questions/71238345/how-to-do-where-in-any-on-multiple-columns-in-golang-with-pq-library
+	inSQL, args := "", []interface{}{}
+	for i, resource := range resources {
+		n := i * 2
+		inSQL += fmt.Sprintf("($%d,$%d),", n+1, n+2)
+		args = append(args, resource.Identifier().Id, resource.Identifier().Type)
 	}
-	inClause := strings.Join(ids, ", ")
+	inSQL = inSQL[:len(inSQL)-1] // drop last ","
+	
+	sql := `DELETE from resources WHERE (id, type) IN (` + inSQL + `)`
 
-	sql := fmt.Sprintf(`DELETE from resources WHERE (id, type) IN (
-		%s
-	)`, inClause)
-
-	_, err := tx.Exec(ctx, sql)
+	_, err := tx.Exec(ctx, sql, args...)
 
 	if err != nil {
 		return err

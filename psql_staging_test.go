@@ -10,12 +10,13 @@ import (
 
 func setup() {
 	// TODO: probably better way to do this
+	// NOTE: changed to docker setup user (couldn't get 'docker' user recognized)
 	database := sj.DatabaseInfo{
 		Server:         "localhost",
-		Database:       "docker",
-		Password:       "docker",
+		Database:       "json_data",
+		Password:       "json_data",
 		Port:           5433,
-		User:           "docker",
+		User:           "json_data",
 		MaxConnections: 1,
 		AcquireTimeout: 30,
 	}
