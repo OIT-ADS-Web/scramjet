@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
@@ -82,6 +81,7 @@ func RetrieveTypeStagingFiltered(typeName string, filter Filter) ([]StagingResou
 func RetrieveTypeStaging(typeName string) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
+    logger := GetLogger()
 
 	// NOTE: this does *not* filter by is_valid so we can try
 	// again with previously fails
@@ -89,7 +89,10 @@ func RetrieveTypeStaging(typeName string) ([]StagingResource, error) {
 	FROM staging 
 	WHERE type = $1
 	`
+	logger.Debug(fmt.Sprintf("running sql %s", sql))
 	rows, err := db.Query(ctx, sql, typeName)
+	logger.Debug(fmt.Sprintf("returned %d rows", rows))
+
 	if err != nil {
 		return nil, err
 	}
@@ -100,11 +103,15 @@ func RetrieveTypeStaging(typeName string) ([]StagingResource, error) {
 func RetrieveAllStaging() ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
+    logger := GetLogger()
 
 	// NOTE: this does *not* filter by is_valid so we can try
 	// again with previously fails
 	sql := `SELECT id, type, data FROM staging`
+	
+	logger.Debug(fmt.Sprintf("running sql %s", sql))
 	rows, err := db.Query(ctx, sql)
+	logger.Debug(fmt.Sprintf("returned %d rows", rows))
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +121,7 @@ func RetrieveAllStaging() ([]StagingResource, error) {
 func RetrieveValidStaging(typeName string) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
+    logger := GetLogger()
 
 	// NOTE: this does *not* filter by is_valid so we can try
 	// again with previously fails
@@ -122,7 +130,10 @@ func RetrieveValidStaging(typeName string) ([]StagingResource, error) {
 	WHERE type = $1
 	AND is_valid = TRUE
 	`
+	logger.Debug(fmt.Sprintf("running sql %s", sql))
 	rows, err := db.Query(ctx, sql, typeName)
+	logger.Debug(fmt.Sprintf("returned %d rows", rows))
+
 	if err != nil {
 		return nil, err
 	}
@@ -132,6 +143,7 @@ func RetrieveValidStaging(typeName string) ([]StagingResource, error) {
 func RetrieveValidStagingFiltered(typeName string, filter Filter) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
+    logger := GetLogger()
 
 	// NOTE: this does *not* filter by is_valid so we can try
 	// again with previously fails
@@ -142,7 +154,10 @@ func RetrieveValidStagingFiltered(typeName string, filter Filter) ([]StagingReso
 	AND %s
 	`, buildStagingFilterSql(filter))
 
+	logger.Debug(fmt.Sprintf("running sql %s", sql))
 	rows, err := db.Query(ctx, sql, typeName)
+	logger.Debug(fmt.Sprintf("returned %d rows", rows))
+
 	if err != nil {
 		return nil, err
 	}
@@ -381,26 +396,24 @@ func batchMarkInvalidInStaging(resources []Identifiable) error {
 	db := GetPool()
 	ctx := context.Background()
 
-	// TODO: better ways to do this
-	var clauses = make([]string, 0)
-
-	for _, resource := range resources {
-		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
-		clauses = append(clauses, s)
+	// stole idea from here:
+	// https://stackoverflow.com/questions/71238345/how-to-do-where-in-any-on-multiple-columns-in-golang-with-pq-library
+	inSQL, args := "", []interface{}{}
+	for i, resource := range resources {
+		n := i * 2
+		inSQL += fmt.Sprintf("($%d,$%d),", n+1, n+2)
+		args = append(args, resource.Identifier().Id, resource.Identifier().Type)
 	}
-
-	inClause := strings.Join(clauses, ", ")
-
-	sql := fmt.Sprintf(`UPDATE staging set is_valid = FALSE WHERE (id, type) IN (
-		  %s
-		)`, inClause)
+	inSQL = inSQL[:len(inSQL)-1] // drop last ","
+	
+	sql := `UPDATE staging set is_valid = FALSE WHERE (id, type) IN (` + inSQL + `)`
 
 	tx, err := db.Begin(ctx)
 
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, sql)
+	_, err = tx.Exec(ctx, sql, args...)
 
 	if err != nil {
 		return err
@@ -471,25 +484,24 @@ func batchMarkValidInStaging(resources []Identifiable) error {
 	// because of SQL IN clause limit of 1000
 	db := GetPool()
 	ctx := context.Background()
-	// TODO: better ways to do this
-	var clauses = make([]string, 0)
 
-	for _, resource := range resources {
-		s := fmt.Sprintf("('%s', '%s')", resource.Identifier().Id, resource.Identifier().Type)
-		clauses = append(clauses, s)
+	// stole idea from here:
+	// https://stackoverflow.com/questions/71238345/how-to-do-where-in-any-on-multiple-columns-in-golang-with-pq-library
+	inSQL, args := "", []interface{}{}
+	for i, resource := range resources {
+		n := i * 2
+		inSQL += fmt.Sprintf("($%d,$%d),", n+1, n+2)
+		args = append(args, resource.Identifier().Id, resource.Identifier().Type)
 	}
-
-	inClause := strings.Join(clauses, ", ")
-
-	sql := fmt.Sprintf(`UPDATE staging set is_valid = TRUE WHERE (id, type) IN (
-		  %s
-		)`, inClause)
-
+	inSQL = inSQL[:len(inSQL)-1] // drop last ","
+	
+	sql := `UPDATE staging set is_valid = TRUE WHERE (id, type) IN (` + inSQL + `)`
+	
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, sql)
+	_, err = tx.Exec(ctx, sql, args...)
 
 	if err != nil {
 		return err
@@ -736,22 +748,23 @@ func ClearMultipleDeletedFromStaging(items ...Identifiable) error {
 	db := GetPool()
 	ctx := context.Background()
 
-	var ids = make([]string, 0)
-	for _, item := range items {
-		s := fmt.Sprintf("('%s', '%s')", item.Identifier().Id, item.Identifier().Type)
-		ids = append(ids, s)
+	// stole idea from here:
+	// https://stackoverflow.com/questions/71238345/how-to-do-where-in-any-on-multiple-columns-in-golang-with-pq-library
+	inSQL, args := "", []interface{}{}
+	for i, resource := range items {
+		n := i * 2
+		inSQL += fmt.Sprintf("($%d,$%d),", n+1, n+2)
+		args = append(args, resource.Identifier().Id, resource.Identifier().Type)
 	}
-	inClause := strings.Join(ids, ", ")
-
-	sql := fmt.Sprintf(`DELETE from staging WHERE (id, type) IN (
-		%s
-	) AND to_delete = true`, inClause)
+	inSQL = inSQL[:len(inSQL)-1] // drop last ","
+	
+	sql := `DELETE from staging WHERE (id, type) IN (` + inSQL + `)`
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, sql)
+	_, err = tx.Exec(ctx, sql, args...)
 	if err != nil {
 		return err
 	}
