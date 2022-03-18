@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"net/url"
 
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/pkg/errors"
@@ -30,25 +31,16 @@ func MakeConnectionPool(conf Config) error {
 
 	connectOnce.Do(func() {
 		var dbErr error
-		//	# Example DSN
-		//user=jack password=secret host=pg.example.com port=5432 dbname=mydb sslmode=verify-ca pool_max_conns=10
-
-		//# Example URL
-		//postgres://jack:secret@pg.example.com:5432/mydb?sslmode=verify-ca&pool_max_conns=10
+		// NOTE: seems to be necessary for passwords with some special characters
+		replacePass := url.QueryEscape(conf.Database.Password)
 		connUrl := fmt.Sprintf("postgres://%s:%s@%s:%d/%s",
-			conf.Database.User, conf.Database.Password, conf.Database.Server,
+			conf.Database.User, replacePass, conf.Database.Server,
 			uint16(conf.Database.Port), conf.Database.Database)
-		config, err := pgxpool.ParseConfig(connUrl)
-		if err != nil {
+		config, dbErr := pgxpool.ParseConfig(connUrl)
+		if dbErr != nil {
 			err = errors.Wrap(dbErr, "Call to pgx.NewConnPool failed")
 		}
 		config.MaxConns = int32(conf.Database.MaxConnections)
-		// not allowed to set aquire timeout anymore?
-		//timeout := time.Duration(conf.Database.AcquireTimeout) * time.Second
-		//config.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) error {
-		//	// do something with every new connection
-		//}
-
 		connPool, dbErr := pgxpool.ConnectConfig(context.Background(), config)
 		if dbErr != nil {
 			err = errors.Wrap(dbErr, "Call to pgx.NewConnPool failed")
