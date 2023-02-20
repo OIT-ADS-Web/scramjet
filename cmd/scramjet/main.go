@@ -180,6 +180,7 @@ func main() {
 			User:           *dbUser,
 			MaxConnections: *dbMaxConnections,
 			AcquireTimeout: *dbAquireTimeout,
+			Application:    "scramjet",
 		}
 		conf = sj.Config{
 			Database: database,

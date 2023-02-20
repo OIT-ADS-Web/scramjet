@@ -5,8 +5,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/namsral/flag"
 	sj "github.com/OIT-ADS-Web/scramjet"
+	"github.com/namsral/flag"
 )
 
 // make this a server?
@@ -34,6 +34,7 @@ func main() {
 			User:           *dbUser,
 			MaxConnections: *dbMaxConnections,
 			AcquireTimeout: *dbAquireTimeout,
+			Application:    "scramjet",
 		}
 		conf = sj.Config{
 			Database: database,
