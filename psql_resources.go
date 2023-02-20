@@ -375,13 +375,15 @@ func moveStagingItemsToResources(items ...StagingResource) error {
 	// supposedly no-op if everything okay
 	defer tx.Rollback(ctx)
 
-	tmpSql := `CREATE TEMPORARY TABLE resource_data_tmp
+	stamp := TimestampString()
+	tmpSql := fmt.Sprintf(`CREATE TEMPORARY TABLE resource_data_%s
 	  (id text NOT NULL, type text NOT NULL, hash text NOT NULL,
 		data json NOT NULL, data_b jsonb NOT NULL,
 		PRIMARY KEY(id, type)
 	  )
 	  ON COMMIT DROP
-	`
+	`, stamp)
+
 	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
@@ -409,7 +411,7 @@ func moveStagingItemsToResources(items ...StagingResource) error {
 			y})
 	}
 
-	_, err = tx.CopyFrom(ctx, pgx.Identifier{"resource_data_tmp"},
+	_, err = tx.CopyFrom(ctx, pgx.Identifier{fmt.Sprintf("resource_data_%s", stamp)},
 		[]string{"id", "type", "hash", "data", "data_b"},
 		pgx.CopyFromRows(inputRows))
 
@@ -417,9 +419,9 @@ func moveStagingItemsToResources(items ...StagingResource) error {
 		return errors.Wrap(err, "copying records into into temporary table")
 	}
 
-	sqlUpsert := `INSERT INTO resources (id, type, hash, data, data_b)
+	sqlUpsert := fmt.Sprintf(`INSERT INTO resources (id, type, hash, data, data_b)
 	  SELECT id, type, hash, data, data_b 
-	  FROM resource_data_tmp
+	  FROM resource_data_%s
 		
 	  ON CONFLICT (id, type) DO UPDATE SET 
 	    data = EXCLUDED.data, 
@@ -429,7 +431,8 @@ func moveStagingItemsToResources(items ...StagingResource) error {
 		  WHEN resources.hash != EXCLUDED.hash THEN NOW()
 		  ELSE resources.updated_at
 		END
-	`
+	`, stamp)
+
 	_, err = tx.Exec(ctx, sqlUpsert)
 	if err != nil {
 		return errors.Wrap(err, "move from temporary to real table")
@@ -505,7 +508,7 @@ func batchDeleteStagingFromResources(ctx context.Context, resources []Identifiab
 		args = append(args, resource.Identifier().Id, resource.Identifier().Type)
 	}
 	inSQL = inSQL[:len(inSQL)-1] // drop last ","
-	
+
 	sql := `DELETE from resources WHERE (id, type) IN (` + inSQL + `)`
 
 	_, err := tx.Exec(ctx, sql, args...)
@@ -551,7 +554,7 @@ func batchDeleteResourcesFromResources(ctx context.Context, resources []Identifi
 		args = append(args, resource.Identifier().Id, resource.Identifier().Type)
 	}
 	inSQL = inSQL[:len(inSQL)-1] // drop last ","
-	
+
 	sql := `DELETE from resources WHERE (id, type) IN (` + inSQL + `)`
 
 	_, err := tx.Exec(ctx, sql, args...)
