@@ -17,6 +17,7 @@ type DatabaseInfo struct {
 	Password       string
 	MaxConnections int
 	AcquireTimeout int
+	Application    string
 }
 
 var Cfg *Config
