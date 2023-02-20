@@ -19,6 +19,7 @@ func setup() {
 		User:           "json_data",
 		MaxConnections: 1,
 		AcquireTimeout: 30,
+		Application:    "test",
 	}
 	config := sj.Config{
 		Database: database,
