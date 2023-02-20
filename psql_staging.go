@@ -81,7 +81,7 @@ func RetrieveTypeStagingFiltered(typeName string, filter Filter) ([]StagingResou
 func RetrieveTypeStaging(typeName string) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
-    logger := GetLogger()
+	logger := GetLogger()
 
 	// NOTE: this does *not* filter by is_valid so we can try
 	// again with previously fails
@@ -103,12 +103,12 @@ func RetrieveTypeStaging(typeName string) ([]StagingResource, error) {
 func RetrieveAllStaging() ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
-    logger := GetLogger()
+	logger := GetLogger()
 
 	// NOTE: this does *not* filter by is_valid so we can try
 	// again with previously fails
 	sql := `SELECT id, type, data FROM staging`
-	
+
 	logger.Debug(fmt.Sprintf("running sql %s", sql))
 	rows, err := db.Query(ctx, sql)
 	logger.Debug(fmt.Sprintf("returned %d rows", rows))
@@ -121,7 +121,7 @@ func RetrieveAllStaging() ([]StagingResource, error) {
 func RetrieveValidStaging(typeName string) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
-    logger := GetLogger()
+	logger := GetLogger()
 
 	// NOTE: this does *not* filter by is_valid so we can try
 	// again with previously fails
@@ -143,7 +143,7 @@ func RetrieveValidStaging(typeName string) ([]StagingResource, error) {
 func RetrieveValidStagingFiltered(typeName string, filter Filter) ([]StagingResource, error) {
 	db := GetPool()
 	ctx := context.Background()
-    logger := GetLogger()
+	logger := GetLogger()
 
 	// NOTE: this does *not* filter by is_valid so we can try
 	// again with previously fails
@@ -405,7 +405,7 @@ func batchMarkInvalidInStaging(resources []Identifiable) error {
 		args = append(args, resource.Identifier().Id, resource.Identifier().Type)
 	}
 	inSQL = inSQL[:len(inSQL)-1] // drop last ","
-	
+
 	sql := `UPDATE staging set is_valid = FALSE WHERE (id, type) IN (` + inSQL + `)`
 
 	tx, err := db.Begin(ctx)
@@ -494,9 +494,9 @@ func batchMarkValidInStaging(resources []Identifiable) error {
 		args = append(args, resource.Identifier().Id, resource.Identifier().Type)
 	}
 	inSQL = inSQL[:len(inSQL)-1] // drop last ","
-	
+
 	sql := `UPDATE staging set is_valid = TRUE WHERE (id, type) IN (` + inSQL + `)`
-	
+
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
@@ -757,7 +757,7 @@ func ClearMultipleDeletedFromStaging(items ...Identifiable) error {
 		args = append(args, resource.Identifier().Id, resource.Identifier().Type)
 	}
 	inSQL = inSQL[:len(inSQL)-1] // drop last ","
-	
+
 	sql := `DELETE from staging WHERE (id, type) IN (` + inSQL + `)`
 
 	tx, err := db.Begin(ctx)
@@ -1002,10 +1002,12 @@ func BulkAddStaging(items ...Storeable) error {
 	// supposedly no-op if everything okay
 	defer tx.Rollback(ctx)
 
-	tmpSql := `CREATE TEMPORARY TABLE staging_data_tmp
+	stamp := TimestampString()
+	tmpSql := fmt.Sprintf(`CREATE TEMPORARY TABLE staging_data_%s
 	  (id text NOT NULL, type text NOT NULL, data json NOT NULL)
 	  ON COMMIT DROP
-	`
+	`, stamp)
+
 	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
@@ -1019,17 +1021,17 @@ func BulkAddStaging(items ...Storeable) error {
 		inputRows = append(inputRows, []interface{}{res.Id, res.Type, res.Data})
 	}
 
-	_, err = tx.CopyFrom(ctx, pgx.Identifier{"staging_data_tmp"},
+	_, err = tx.CopyFrom(ctx, pgx.Identifier{fmt.Sprintf("staging_data_%s", stamp)},
 		[]string{"id", "type", "data"},
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
 		return errors.Wrap(err, "copying into temp table")
 	}
-	sql2 := `INSERT INTO staging (id, type, data)
-	  SELECT id, type, data FROM staging_data_tmp
+	sql2 := fmt.Sprintf(`INSERT INTO staging (id, type, data)
+	  SELECT id, type, data FROM staging_data_%s
 	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data
-	`
+	`, stamp)
 
 	_, err = tx.Exec(ctx, sql2)
 
@@ -1056,10 +1058,12 @@ func BulkAddStagingResources(resources ...StagingResource) error {
 	// supposedly no-op if everything okay
 	defer tx.Rollback(ctx)
 
-	tmpSql := `CREATE TEMPORARY TABLE staging_data_tmp
+	stamp := TimestampString()
+	tmpSql := fmt.Sprintf(`CREATE TEMPORARY TABLE staging_data_%s
 	  (id text NOT NULL, type text NOT NULL, data json NOT NULL)
 	  ON COMMIT DROP
-	`
+	`, stamp)
+
 	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
@@ -1073,17 +1077,17 @@ func BulkAddStagingResources(resources ...StagingResource) error {
 		inputRows = append(inputRows, []interface{}{res.Id, res.Type, res.Data})
 	}
 
-	_, err = tx.CopyFrom(ctx, pgx.Identifier{"staging_data_tmp"},
+	_, err = tx.CopyFrom(ctx, pgx.Identifier{fmt.Sprintf("staging_data_%s", stamp)},
 		[]string{"id", "type", "data"},
 		pgx.CopyFromRows(inputRows))
 
 	if err != nil {
 		return errors.Wrap(err, "copying into temp table")
 	}
-	sql2 := `INSERT INTO staging (id, type, data)
-	  SELECT id, type, data FROM staging_data_tmp
+	sql2 := fmt.Sprintf(`INSERT INTO staging (id, type, data)
+	  SELECT id, type, data FROM staging_data_%s
 	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data
-	`
+	`, stamp)
 
 	_, err = tx.Exec(ctx, sql2)
 
@@ -1153,11 +1157,13 @@ func BulkAddStagingForDelete(items ...Identifiable) error {
 	defer tx.Rollback(ctx)
 
 	// note: just defaulting is_valid and to_delete
-	tmpSql := `CREATE TEMPORARY TABLE staging_data_deletes_tmp
+	stamp := TimestampString()
+	tmpSql := fmt.Sprintf(`CREATE TEMPORARY TABLE staging_data_deletes_%s
 	  (id text NOT NULL, type text NOT NULL, data json NOT NULL, 
 		is_valid boolean DEFAULT FALSE, to_delete boolean DEFAULT TRUE)
 	  ON COMMIT DROP
-	`
+	`, stamp)
+
 	_, err = tx.Exec(ctx, tmpSql)
 
 	if err != nil {
@@ -1170,7 +1176,7 @@ func BulkAddStagingForDelete(items ...Identifiable) error {
 		inputRows = append(inputRows, []interface{}{res.Id, res.Type, res.Data})
 	}
 
-	_, err = tx.CopyFrom(ctx, pgx.Identifier{"staging_data_deletes_tmp"},
+	_, err = tx.CopyFrom(ctx, pgx.Identifier{fmt.Sprintf("staging_data_deletes_%s", stamp)},
 		[]string{"id", "type", "data"},
 		pgx.CopyFromRows(inputRows))
 
@@ -1178,11 +1184,11 @@ func BulkAddStagingForDelete(items ...Identifiable) error {
 		return errors.Wrap(err, "creating copy rows")
 	}
 	// NOTE: if it exists, just nulling out the data
-	sql2 := `INSERT INTO staging (id, type, data, is_valid, to_delete)
-	  SELECT id, type, data, is_valid, to_delete FROM staging_data_deletes_tmp
+	sql2 := fmt.Sprintf(`INSERT INTO staging (id, type, data, is_valid, to_delete)
+	  SELECT id, type, data, is_valid, to_delete FROM staging_data_deletes_%s
 	  ON CONFLICT (id, type) DO UPDATE SET data = EXCLUDED.data,
 	  is_valid = EXCLUDED.is_valid, to_delete = EXCLUDED.to_delete
-	`
+	`, stamp)
 
 	_, err = tx.Exec(ctx, sql2)
 
