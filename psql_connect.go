@@ -33,7 +33,7 @@ func MakeConnectionPool(conf Config) error {
 		var dbErr error
 		// NOTE: seems to be necessary for passwords with some special characters
 		replacePass := url.QueryEscape(conf.Database.Password)
-		connUrl := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?application_name=%s?search_path=%s,public",
+		connUrl := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?application_name=%s&search_path=%s,public",
 			conf.Database.User, replacePass, conf.Database.Server,
 			uint16(conf.Database.Port), conf.Database.Database,
 			conf.Database.Application, conf.Database.Schema)
