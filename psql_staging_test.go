@@ -20,6 +20,7 @@ func setup() {
 		MaxConnections: 1,
 		AcquireTimeout: 30,
 		Application:    "test",
+		Schema:         "public",
 	}
 	config := sj.Config{
 		Database: database,
